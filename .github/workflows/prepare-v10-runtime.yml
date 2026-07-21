@@ -28,12 +28,14 @@ jobs:
         run: |
           set -euo pipefail
           test -f theater-data.js
+          test -f hotfix-v10.css
           node --check theater-data.js
           grep -q '"title":"Die Räuber"' theater-data.js
           grep -q '"paragraphCount":1457' theater-data.js
           grep -q '"pageCount":63' theater-data.js
           grep -q '"physicalPageCount":64' theater-data.js
           grep -q '"text":"ENDE"' theater-data.js
+          grep -q 'presentationExitButton' index.html
 
       - name: Prepare the direct-data runtime
         shell: bash
@@ -59,6 +61,27 @@ jobs:
           elif "getState: () => ({\n        version: VERSION," not in source:
               raise RuntimeError('Could not expose VERSION in getState')
 
+          element_marker = "fullscreenButton: $('#fullscreenButton'),"
+          if "presentationExitButton: $('#presentationExitButton')," not in source:
+              if element_marker not in source:
+                  raise RuntimeError('Could not find fullscreen button mapping')
+              source = source.replace(
+                  element_marker,
+                  element_marker + "\n    presentationExitButton: $('#presentationExitButton'),",
+                  1,
+              )
+
+          binding_marker = "elements.fullscreenButton.addEventListener('click', toggleFullscreen);"
+          exit_binding = "elements.presentationExitButton.addEventListener('click', toggleFullscreen);"
+          if exit_binding not in source:
+              if binding_marker not in source:
+                  raise RuntimeError('Could not find fullscreen binding')
+              source = source.replace(
+                  binding_marker,
+                  binding_marker + "\n    " + exit_binding,
+                  1,
+              )
+
           path.write_text(source, encoding='utf-8')
           PY
 
@@ -68,6 +91,7 @@ jobs:
             './',
             './index.html',
             './styles.css?v=10',
+            './hotfix-v10.css?v=10',
             './app.js?v=10',
             './theater-data.js?v=10',
             './manifest.webmanifest?v=10'
