@@ -1,24 +1,35 @@
-# Theater Teleprompter
+# Theater-Teleprompter
 
-Ein browserbasierter Teleprompter für Theaterproben und Aufführungen, optimiert für iPad und externe Bildschirme.
+Browserbasierter Teleprompter für das Bühnenmanuskript **„Die Räuber“**, optimiert für iPad, externe Bildschirme und den Einsatz neben der Bühne.
 
 ## Funktionen
 
-- Theatertext direkt einfügen oder als `.txt` laden
-- Automatisches Scrollen mit regelbarer Geschwindigkeit
-- Große, gut lesbare Darstellung
-- Nachtmodus und Vollbild
-- Szenenmarken über Überschriften wie `AKT 1` oder `SZENE 2`
-- Speicherung des Textes und der Einstellungen im Browser
-- Offline-Nutzung als Progressive Web App
+- vollständiger Text aus `Theater.Text.Neu.formatiert.docx`
+- direkte Navigation nach **Akt**, **Szene** und **Seite**
+- Seitensprung über Nummerneingabe sowie Vor-/Zurück-Tasten
+- automatische Scrollfunktion mit einstellbarem Tempo
+- einstellbare Schriftgröße und Zeilenhöhe
+- deutliche Darstellung von Akt, Szene, Szenenbild, Sprecher und Replik
+- Leseführung im Bildschirmzentrum
+- Nachtmodus, Vollbildmodus und Offline-Cache
+- responsives Menü für iPad und Smartphone
 
 ## Bedienung
 
-1. `index.html` im Browser öffnen oder das Projekt über GitHub Pages bereitstellen.
-2. Text einfügen oder eine Textdatei laden.
-3. Mit **Start** den Lauf beginnen.
-4. Leertaste pausiert oder startet, Pfeiltasten verändern die Geschwindigkeit.
+- `Leertaste`: Start oder Pause
+- `Pfeil links/rechts`: vorherige oder nächste Seite
+- `Pfeil hoch/runter`: Scrolltempo ändern
+- `F`: Vollbild
+- `M`: Navigation öffnen oder schließen
 
-## Entwicklung
+## GitHub Pages
 
-Das Projekt verwendet bewusst nur HTML, CSS und JavaScript. Keine Build-Schritte, keine Abhängigkeiten, kein feierliches Beschwören eines Paketmanagers.
+Der Workflow `.github/workflows/pages.yml` veröffentlicht den Inhalt des Repositorys automatisch über GitHub Pages. In den Repository-Einstellungen muss unter **Pages → Build and deployment → Source** einmalig **GitHub Actions** ausgewählt werden.
+
+Die öffentliche Adresse lautet anschließend voraussichtlich:
+
+`https://christhscrde-blip.github.io/theater-teleprompter/`
+
+## Textdaten
+
+Die komprimierten Dateien unter `data/` enthalten 1.457 nicht-leere Absätze, 5 Akte, 15 Szenen und die beim PDF-Rendering ermittelte Aufteilung auf 64 Seiten. Die Word-Formatvorlagen wurden als semantische Typen übernommen.
