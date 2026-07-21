@@ -1,4 +1,4 @@
-name: Deploy GitHub Pages
+name: Build and deploy Die Räuber
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
@@ -15,14 +15,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+  build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Build direct Die Räuber data
         shell: bash
@@ -32,22 +31,9 @@ jobs:
           import gzip
           import json
           import re
-          import shutil
           from pathlib import Path
 
           root = Path('.')
-          site = root / '_site'
-          site.mkdir(exist_ok=True)
-
-          for filename in (
-              'index.html',
-              'styles.css',
-              'app.js',
-              'manifest.webmanifest',
-              'service-worker.js',
-          ):
-              shutil.copy2(root / filename, site / filename)
-
           chunks = []
           chunk_files = sorted((root / 'data').glob('chunk-*.js'))
           if len(chunk_files) != 9:
@@ -61,24 +47,32 @@ jobs:
               chunks.append(json.loads(match.group(1)))
 
           compressed = base64.b64decode(''.join(chunks), validate=True)
-          source_text = gzip.decompress(compressed).decode('utf-8')
-          data = json.loads(source_text)
-
+          data = json.loads(gzip.decompress(compressed).decode('utf-8'))
           paragraphs = data.get('paragraphs')
           if data.get('title') != 'Die Räuber' or not isinstance(paragraphs, list) or len(paragraphs) < 1000:
-              raise RuntimeError('Die entpackten Daten sind nicht der vollständige Text von „Die Räuber“.')
+              raise RuntimeError('Die Daten sind nicht der vollständige Text von „Die Räuber“.')
 
           direct_script = (
               'window.THEATER_SCRIPT='
               + json.dumps(data, ensure_ascii=False, separators=(',', ':'))
               + ';\nwindow.loadTheaterScript=async()=>window.THEATER_SCRIPT;\n'
           )
-          (site / 'script-direct.js').write_text(direct_script, encoding='utf-8')
-          (site / '.nojekyll').write_text('', encoding='utf-8')
-
+          Path('script-direct.js').write_text(direct_script, encoding='utf-8')
           print(f'{len(paragraphs)} Absätze direkt in script-direct.js geschrieben.')
-          print(f'Dateigröße: {(site / "script-direct.js").stat().st_size} Byte')
           PY
+
+      - name: Commit generated direct text
+        shell: bash
+        run: |
+          if git diff --quiet -- script-direct.js && git ls-files --error-unmatch script-direct.js >/dev/null 2>&1; then
+            echo "script-direct.js ist bereits aktuell."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add script-direct.js
+            git commit -m "Generate direct Die Räuber text"
+            git push
+          fi
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
@@ -86,7 +80,7 @@ jobs:
       - name: Upload static site
         uses: actions/upload-pages-artifact@v3
         with:
-          path: _site
+          path: .
 
       - name: Deploy
         id: deployment
