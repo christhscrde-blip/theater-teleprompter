@@ -1,4 +1,4 @@
-name: Audit current theater payloads
+name: Recover and test direct theater data
 
 on:
   pull_request:
@@ -9,8 +9,12 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: recover-direct-theater-data-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  audit-payloads:
+  recover-data:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout pull request head
@@ -19,7 +23,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
 
-      - name: Audit payload assembly
+      - name: Find the fully valid Base64 prefix
         shell: bash
         run: |
           set -euo pipefail
@@ -31,102 +35,100 @@ jobs:
           from pathlib import Path
 
           files = sorted(Path('.').glob('theater-payload-*.txt'))
-          report = {'files': [], 'strategies': {}}
-          alphabet = re.compile(r'[^A-Za-z0-9+/=]')
-
-          def normalize(value, remove_all_padding=False):
-              value = alphabet.sub('', value)
-              if remove_all_padding:
-                  value = value.replace('=', '')
-              else:
-                  value = value.rstrip('=')
-              return value + '=' * ((4 - len(value) % 4) % 4)
-
-          def parse_payload(raw_bytes):
-              text = gzip.decompress(raw_bytes).decode('utf-8').strip()
-              if text.startswith('window.THEATER_SCRIPT=') and text.endswith(';'):
-                  text = text[len('window.THEATER_SCRIPT='):-1]
-              data = json.loads(text)
-              paragraphs = data.get('paragraphs', [])
-              if not (
-                  data.get('title') == 'Die Räuber'
-                  and len(paragraphs) == 1457
-                  and len(data.get('acts', [])) == 5
-                  and len(data.get('scenes', [])) == 15
-                  and paragraphs[0].get('text') == 'FRIEDRICH SCHILLER'
-                  and paragraphs[-1].get('text') == 'ENDE'
-              ):
-                  raise RuntimeError('Decoded JSON failed theater validation')
-              return data
+          if len(files) != 4:
+              raise RuntimeError(f'Expected 4 payload files, found {len(files)}')
 
           raw_texts = [path.read_text(encoding='utf-8') for path in files]
-          for path, text in zip(files, raw_texts):
-              cleaned = alphabet.sub('', text)
-              report['files'].append({
-                  'file': str(path),
-                  'rawLength': len(text),
-                  'cleanLength': len(cleaned),
-                  'paddingCount': cleaned.count('='),
-                  'moduloWithoutPadding': len(cleaned.replace('=', '')) % 4,
-                  'starts': cleaned[:16],
-                  'ends': cleaned[-16:]
-              })
+          joined = re.sub(r'[^A-Za-z0-9+/]', '', ''.join(raw_texts))
+          report = {
+              'sourceFiles': [str(path) for path in files],
+              'sourceLengths': [len(text) for text in raw_texts],
+              'cleanCombinedLength': len(joined),
+              'testedPrefixLengths': 0,
+              'validPrefixLength': None,
+              'discardedTailLength': None
+          }
 
-          results = {}
+          def parse_candidate(encoded):
+              compressed = base64.b64decode(encoded, validate=True)
+              source = gzip.decompress(compressed).decode('utf-8').strip()
+              prefix = 'window.THEATER_SCRIPT='
+              if source.startswith(prefix) and source.endswith(';'):
+                  source = source[len(prefix):-1]
+              data = json.loads(source)
+              paragraphs = data.get('paragraphs', [])
+              if data.get('title') != 'Die Räuber':
+                  raise RuntimeError('wrong title')
+              if len(paragraphs) != 1457:
+                  raise RuntimeError('wrong paragraph count')
+              if len(data.get('acts', [])) != 5:
+                  raise RuntimeError('wrong act count')
+              if len(data.get('scenes', [])) != 15:
+                  raise RuntimeError('wrong scene count')
+              if paragraphs[0].get('text') != 'FRIEDRICH SCHILLER':
+                  raise RuntimeError('wrong beginning')
+              if paragraphs[-1].get('text') != 'ENDE':
+                  raise RuntimeError('wrong ending')
+              return data
 
-          def attempt(name, callback):
+          valid_data = None
+          valid_length = None
+          upper = len(joined) - (len(joined) % 4)
+          lower = 58000
+          for length in range(upper, lower - 1, -4):
+              report['testedPrefixLengths'] += 1
               try:
-                  data = callback()
-                  results[name] = data
-                  report['strategies'][name] = {
-                      'success': True,
-                      'paragraphs': len(data['paragraphs']),
-                      'pages': data.get('pageCount'),
-                      'first': data['paragraphs'][0]['text'],
-                      'last': data['paragraphs'][-1]['text']
-                  }
-              except Exception as error:
-                  report['strategies'][name] = {
-                      'success': False,
-                      'errorType': type(error).__name__,
-                      'error': str(error)
-                  }
+                  data = parse_candidate(joined[:length])
+              except Exception:
+                  continue
+              valid_data = data
+              valid_length = length
+              break
 
-          attempt('joined_without_padding', lambda: parse_payload(
-              base64.b64decode(normalize(''.join(raw_texts), True), validate=True)
-          ))
-
-          attempt('decode_each_then_join_bytes', lambda: parse_payload(b''.join(
-              base64.b64decode(normalize(text), validate=True) for text in raw_texts
-          )))
-
-          def longest_runs():
-              parts = []
-              for text in raw_texts:
-                  runs = re.findall(r'[A-Za-z0-9+/=]{100,}', text)
-                  if not runs:
-                      raise RuntimeError('No long Base64 run found')
-                  parts.append(base64.b64decode(normalize(max(runs, key=len)), validate=True))
-              return parse_payload(b''.join(parts))
-
-          attempt('longest_run_per_file', longest_runs)
-
-          Path('/tmp/payload-report.json').write_text(
-              json.dumps(report, ensure_ascii=False, indent=2) + '\n', encoding='utf-8'
-          )
-
-          if results:
-              name = sorted(results)[0]
-              data = results[name]
-              source = (
-                  'window.THEATER_SCRIPT='
-                  + json.dumps(data, ensure_ascii=False, separators=(',', ':'))
-                  + ';\nwindow.loadTheaterScript=async()=>window.THEATER_SCRIPT;\n'
+          if valid_data is None:
+              Path('/tmp/prefix-recovery-report.json').write_text(
+                  json.dumps(report, ensure_ascii=False, indent=2) + '\n',
+                  encoding='utf-8'
               )
-              Path('/tmp/theater-data.js').write_text(source, encoding='utf-8')
-          PY
+              raise RuntimeError('No fully validated Base64 prefix was found')
 
-      - name: Store report and validated direct data
+          report['validPrefixLength'] = valid_length
+          report['discardedTailLength'] = len(joined) - valid_length
+          report['paragraphs'] = len(valid_data['paragraphs'])
+          report['acts'] = len(valid_data['acts'])
+          report['scenes'] = len(valid_data['scenes'])
+          report['first'] = valid_data['paragraphs'][0]['text']
+          report['last'] = valid_data['paragraphs'][-1]['text']
+
+          # Normalize the title sheet to page 0 only when the preserved data
+          # still numbers it as page 1. Avoid shifting an already-normalized set.
+          pages = [int(item.get('page', 0)) for item in valid_data['paragraphs']]
+          if min(pages) >= 1:
+              for paragraph in valid_data['paragraphs']:
+                  paragraph['page'] = max(0, int(paragraph.get('page', 1)) - 1)
+              for key in ('acts', 'scenes', 'pages'):
+                  for entry in valid_data.get(key, []):
+                      if 'page' in entry:
+                          entry['page'] = max(0, int(entry['page']) - 1)
+
+          valid_data['pageCount'] = 63
+          valid_data['physicalPageCount'] = 64
+          valid_data['paragraphCount'] = 1457
+
+          source = (
+              'window.THEATER_SCRIPT='
+              + json.dumps(valid_data, ensure_ascii=False, separators=(',', ':'))
+              + ';\nwindow.loadTheaterScript=async()=>window.THEATER_SCRIPT;\n'
+          )
+          Path('/tmp/theater-data.js').write_text(source, encoding='utf-8')
+          Path('/tmp/prefix-recovery-report.json').write_text(
+              json.dumps(report, ensure_ascii=False, indent=2) + '\n',
+              encoding='utf-8'
+          )
+          PY
+          node --check /tmp/theater-data.js
+
+      - name: Commit the validated direct data to the hotfix branch
         shell: bash
         run: |
           set -euo pipefail
@@ -134,12 +136,14 @@ jobs:
           if test -z "$branch"; then branch='hotfix/direct-json-v10'; fi
           git checkout "$branch"
           mkdir -p .audit
-          cp /tmp/payload-report.json .audit/payload-report.json
-          if test -f /tmp/theater-data.js; then cp /tmp/theater-data.js theater-data.js; fi
+          cp /tmp/prefix-recovery-report.json .audit/prefix-recovery-report.json
+          cp /tmp/theater-data.js theater-data.js
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add .audit/payload-report.json
-          if test -f theater-data.js; then git add theater-data.js; fi
-          if git diff --cached --quiet; then exit 0; fi
-          git commit -m 'Record exact online payload audit'
+          git add .audit/prefix-recovery-report.json theater-data.js
+          if git diff --cached --quiet; then
+            echo 'Validated direct data is already current.'
+            exit 0
+          fi
+          git commit -m 'Generate fully validated direct Die Räuber data'
           git push origin "HEAD:$branch"
