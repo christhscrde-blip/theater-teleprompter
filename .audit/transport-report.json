@@ -101,8 +101,8 @@
       "expectedSize": 4096,
       "actualSize": 4096,
       "expectedSha256": "19fb7025eba168bf32ce255baf2e2512398cd3bef126c0753b0f88a04e875eec",
-      "actualSha256": "5a30bd4d058d1d98c1e57a41a5a4333686f4193b9dbd0a44268f5c84aae7ef08",
-      "exact": false
+      "actualSha256": "19fb7025eba168bf32ce255baf2e2512398cd3bef126c0753b0f88a04e875eec",
+      "exact": true
     },
     {
       "name": "block-14.b64",
@@ -129,6 +129,18 @@
       "exact": true
     }
   ],
-  "allBlocksExact": false,
-  "build": null
+  "allBlocksExact": true,
+  "build": {
+    "success": true,
+    "base64Sha256": "43fe8f342fd0ada6cc581742e2d96650959be3803cefc428d55c5a6ccfefa0e5",
+    "gzipSha256": "fe2cf6547329797bdafa21aa5beaef32752e4d2f411f358e39ee00a828689703",
+    "jsonSha256": "87c35d3b503758c201e23cbc59acf34d003b47106405db016df03e414ab916e5",
+    "paragraphs": 1457,
+    "pages": 63,
+    "physicalPages": 64,
+    "acts": 5,
+    "scenes": 15,
+    "first": "FRIEDRICH SCHILLER",
+    "last": "ENDE"
+  }
 }
