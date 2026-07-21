@@ -1,21 +1,16 @@
 window.loadTheaterScript = async function () {
-  const encoded = window.THEATER_DATA_CHUNKS.join('');
-  const binary = atob(encoded);
-  const bytes = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index += 1) {
-    bytes[index] = binary.charCodeAt(index);
-  }
+  const binary = atob(window.THEATER_DATA_CHUNKS.join(''));
+  const bytes = Uint8Array.from(binary, character => character.charCodeAt(0));
+  let decoded;
 
-  let text;
-  if (typeof TextDecoder !== 'undefined') {
-    text = new TextDecoder('utf-8').decode(bytes);
+  if (typeof DecompressionStream !== 'undefined') {
+    const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+    decoded = new Uint8Array(await new Response(stream).arrayBuffer());
   } else {
-    let escaped = '';
-    for (let index = 0; index < bytes.length; index += 1) {
-      escaped += `%${bytes[index].toString(16).padStart(2, '0')}`;
-    }
-    text = decodeURIComponent(escaped);
+    const { gunzipSync } = await import('https://cdn.jsdelivr.net/npm/fflate@0.8.2/esm/browser.js');
+    decoded = gunzipSync(bytes);
   }
 
+  const text = new TextDecoder('utf-8').decode(decoded);
   return JSON.parse(text);
 };
