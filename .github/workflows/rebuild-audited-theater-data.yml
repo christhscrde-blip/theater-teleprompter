@@ -1,4 +1,4 @@
-name: Rebuild audited Die Räuber data
+name: Audit current theater payloads
 
 on:
   pull_request:
@@ -7,23 +7,18 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
-
-concurrency:
-  group: rebuild-audited-theater-data
-  cancel-in-progress: true
+  contents: read
 
 jobs:
-  rebuild:
+  audit-payloads:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout preserved source branch
+      - name: Checkout pull request head
         uses: actions/checkout@v4
         with:
-          ref: backup/pre-browser-audit-2026-07-21
-          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
-      - name: Recover, reconstruct and validate
+      - name: Test every supported payload assembly
         shell: bash
         run: |
           set -euo pipefail
@@ -32,130 +27,91 @@ jobs:
           import gzip
           import json
           import re
-          import zlib
           from pathlib import Path
 
-          alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
-          pattern = re.compile(r'push\(("(?:\\.|[^"\\])*")\)', re.DOTALL)
-          chunks = []
-          files = sorted(Path('data').glob('chunk-*.js'))
-          if len(files) != 9:
-              raise RuntimeError(f'Expected 9 preserved chunks, found {len(files)}')
-          for path in files:
-              match = pattern.search(path.read_text(encoding='utf-8'))
-              if not match:
-                  raise RuntimeError(f'No payload found in {path}')
-              chunks.append(json.loads(match.group(1)))
+          files = sorted(Path('.').glob('theater-payload-*.txt'))
+          if not files:
+              raise RuntimeError('No theater-payload files found')
 
-          joined = re.sub(r'[^A-Za-z0-9+/]', '', ''.join(chunks))
-          if len(joined) % 4 != 1:
-              raise RuntimeError(f'Unexpected damaged Base64 length: {len(joined)}')
+          alphabet = re.compile(r'[^A-Za-z0-9+/=]')
 
-          def pad(value):
+          def normalize(value, remove_all_padding=False):
+              value = alphabet.sub('', value)
+              if remove_all_padding:
+                  value = value.replace('=', '')
+              else:
+                  value = value.rstrip('=')
               return value + '=' * ((4 - len(value) % 4) % 4)
 
-          # Decode with a harmless symbol appended. Bytes before the missing
-          # symbol remain valid, allowing zlib to reveal the corruption area.
-          probe = base64.b64decode(pad(joined + 'A'), validate=True)
-          decoder = zlib.decompressobj(16 + zlib.MAX_WBITS)
-          failure_byte = None
-          offset = 0
-          step = 32
-          while offset < len(probe):
-              block = probe[offset:offset + step]
-              try:
-                  decoder.decompress(block)
-              except zlib.error:
-                  failure_byte = offset
-                  break
-              offset += len(block)
-          if failure_byte is None:
-              failure_byte = len(probe)
+          def parse_payload(raw_bytes):
+              text = gzip.decompress(raw_bytes).decode('utf-8').strip()
+              if text.startswith('window.THEATER_SCRIPT=') and text.endswith(';'):
+                  text = text[len('window.THEATER_SCRIPT='):-1]
+              data = json.loads(text)
+              paragraphs = data.get('paragraphs', [])
+              valid = (
+                  data.get('title') == 'Die Räuber'
+                  and len(paragraphs) == 1457
+                  and len(data.get('acts', [])) == 5
+                  and len(data.get('scenes', [])) == 15
+                  and paragraphs[0].get('text') == 'FRIEDRICH SCHILLER'
+                  and paragraphs[-1].get('text') == 'ENDE'
+              )
+              if not valid:
+                  raise RuntimeError('Decoded JSON failed theater validation')
+              return data
 
-          estimate = max(0, min(len(joined), (failure_byte // 3) * 4))
-          report = {
-              'damaged_length': len(joined),
-              'probe_bytes': len(probe),
-              'zlib_failure_byte': failure_byte,
-              'estimated_base64_position': estimate,
-              'searched': []
-          }
+          raw_texts = [path.read_text(encoding='utf-8') for path in files]
+          print('FILES')
+          for path, text in zip(files, raw_texts):
+              cleaned = alphabet.sub('', text)
+              print({
+                  'file': str(path),
+                  'raw_length': len(text),
+                  'clean_length': len(cleaned),
+                  'padding_count': cleaned.count('='),
+                  'starts': cleaned[:12],
+                  'ends': cleaned[-12:]
+              })
 
-          recovered = None
-          winning = None
-          for radius in (96, 384, 1536):
-              start = max(0, estimate - radius)
-              end = min(len(joined), estimate + radius + 1)
-              report['searched'].append({'radius': radius, 'start': start, 'end': end})
-              for position in range(start, end):
-                  prefix = joined[:position]
-                  suffix = joined[position:]
-                  for symbol in alphabet:
-                      candidate = prefix + symbol + suffix
-                      try:
-                          compressed = base64.b64decode(pad(candidate), validate=True)
-                          raw = gzip.decompress(compressed).decode('utf-8')
-                          data = json.loads(raw)
-                      except Exception:
-                          continue
-                      paragraphs = data.get('paragraphs', [])
-                      if (
-                          data.get('title') == 'Die Räuber'
-                          and len(paragraphs) == 1457
-                          and len(data.get('acts', [])) == 5
-                          and len(data.get('scenes', [])) == 15
-                          and paragraphs[0].get('text') == 'FRIEDRICH SCHILLER'
-                          and paragraphs[-1].get('text') == 'ENDE'
-                      ):
-                          recovered = data
-                          winning = {'position': position, 'symbol': symbol, 'radius': radius}
-                          break
-                  if recovered is not None:
-                      break
-              if recovered is not None:
-                  break
+          strategies = {}
 
-          report['winning_repair'] = winning
-          Path('/tmp/theater-recovery.json').write_text(
-              json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8'
-          )
-          if recovered is None:
-              raise RuntimeError(f'No valid single-symbol repair found near Base64 position {estimate}')
+          # Strategy 1: one Base64 stream, discarding all embedded padding.
+          try:
+              joined = ''.join(raw_texts)
+              decoded = base64.b64decode(normalize(joined, remove_all_padding=True), validate=True)
+              strategies['joined_without_padding'] = parse_payload(decoded)
+              print('SUCCESS joined_without_padding')
+          except Exception as error:
+              print('FAIL joined_without_padding:', type(error).__name__, error)
 
-          for paragraph in recovered['paragraphs']:
-              paragraph['page'] = max(0, int(paragraph.get('page', 1)) - 1)
-          for key in ('acts', 'scenes', 'pages'):
-              for entry in recovered.get(key, []):
-                  if 'page' in entry:
-                      entry['page'] = max(0, int(entry['page']) - 1)
-          recovered['pageCount'] = 63
-          recovered['physicalPageCount'] = 64
-          recovered['paragraphCount'] = len(recovered['paragraphs'])
+          # Strategy 2: each file is independently Base64 encoded; concatenate bytes.
+          try:
+              byte_parts = [
+                  base64.b64decode(normalize(text, remove_all_padding=False), validate=True)
+                  for text in raw_texts
+              ]
+              strategies['decode_each_then_join_bytes'] = parse_payload(b''.join(byte_parts))
+              print('SUCCESS decode_each_then_join_bytes')
+          except Exception as error:
+              print('FAIL decode_each_then_join_bytes:', type(error).__name__, error)
 
-          source = (
-              'window.THEATER_SCRIPT='
-              + json.dumps(recovered, ensure_ascii=False, separators=(',', ':'))
-              + ';\nwindow.loadTheaterScript=async()=>window.THEATER_SCRIPT;\n'
-          )
-          Path('/tmp/theater-data.js').write_text(source, encoding='utf-8')
+          # Strategy 3: extract the longest Base64-looking run from each wrapper file.
+          try:
+              byte_parts = []
+              for text in raw_texts:
+                  runs = re.findall(r'[A-Za-z0-9+/=]{100,}', text)
+                  if not runs:
+                      raise RuntimeError('No long Base64 run found')
+                  candidate = max(runs, key=len)
+                  byte_parts.append(base64.b64decode(normalize(candidate), validate=True))
+              strategies['longest_run_per_file'] = parse_payload(b''.join(byte_parts))
+              print('SUCCESS longest_run_per_file')
+          except Exception as error:
+              print('FAIL longest_run_per_file:', type(error).__name__, error)
+
+          if not strategies:
+              raise RuntimeError('No payload assembly strategy produced a valid theater script')
+
+          print('VALIDATED_STRATEGIES', sorted(strategies))
           PY
-          node --check /tmp/theater-data.js
-
-      - name: Commit validated result to repair branch
-        shell: bash
-        run: |
-          set -euo pipefail
-          git fetch origin repair/direct-data-v8
-          git checkout repair/direct-data-v8
-          mkdir -p .audit
-          cp /tmp/theater-recovery.json .audit/theater-recovery.json
-          cp /tmp/theater-data.js theater-data.js
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .audit/theater-recovery.json theater-data.js
-          if git diff --cached --quiet; then
-            echo 'Recovered data is already current.'
-            exit 0
-          fi
-          git commit -m 'Recover and validate direct Die Räuber data'
-          git push origin HEAD:repair/direct-data-v8
