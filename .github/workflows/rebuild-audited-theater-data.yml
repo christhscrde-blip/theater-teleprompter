@@ -4,8 +4,6 @@ on:
   pull_request:
     branches: [main]
     types: [opened, synchronize, reopened]
-  schedule:
-    - cron: '*/5 * * * *'
   workflow_dispatch:
 
 permissions:
@@ -25,7 +23,7 @@ jobs:
           ref: backup/pre-browser-audit-2026-07-21
           fetch-depth: 0
 
-      - name: Reconstruct and validate direct browser data
+      - name: Diagnose, reconstruct and validate
         shell: bash
         run: |
           set -euo pipefail
@@ -36,65 +34,110 @@ jobs:
           import re
           from pathlib import Path
 
+          report = {'files': [], 'variants': []}
           files = sorted(Path('data').glob('chunk-*.js'))
-          if len(files) != 9:
-              raise RuntimeError(f'Expected 9 preserved chunks, found {len(files)}')
-
+          report['file_count'] = len(files)
           pattern = re.compile(r'push\(("(?:\\.|[^"\\])*")\)', re.DOTALL)
           chunks = []
           for path in files:
-              match = pattern.search(path.read_text(encoding='utf-8'))
+              text = path.read_text(encoding='utf-8')
+              match = pattern.search(text)
               if not match:
-                  raise RuntimeError(f'No payload found in {path}')
-              chunks.append(json.loads(match.group(1)))
+                  report['files'].append({'name': str(path), 'error': 'payload not found'})
+                  continue
+              chunk = json.loads(match.group(1))
+              chunks.append(chunk)
+              report['files'].append({
+                  'name': str(path),
+                  'length': len(chunk),
+                  'invalid_chars': len(re.findall(r'[^A-Za-z0-9+/=]', chunk)),
+                  'padding_count': chunk.count('='),
+                  'starts': chunk[:12],
+                  'ends': chunk[-12:]
+              })
 
           joined = ''.join(chunks)
-          cleaned = re.sub(r'[^A-Za-z0-9+/=]', '', joined).rstrip('=')
-          cleaned += '=' * ((4 - len(cleaned) % 4) % 4)
-          raw = gzip.decompress(base64.b64decode(cleaned, validate=True)).decode('utf-8')
-          data = json.loads(raw)
+          variants = {
+              'joined_as_is': joined,
+              'invalid_removed': re.sub(r'[^A-Za-z0-9+/=]', '', joined),
+              'all_padding_rebuilt': re.sub(r'[^A-Za-z0-9+/]', '', joined),
+              'per_chunk_padding_removed': ''.join(re.sub(r'[^A-Za-z0-9+/]', '', chunk) for chunk in chunks)
+          }
 
-          paragraphs = data.get('paragraphs')
-          if data.get('title') != 'Die Räuber' or not isinstance(paragraphs, list) or len(paragraphs) != 1457:
-              raise RuntimeError('Preserved data validation failed')
-          if paragraphs[0].get('text') != 'FRIEDRICH SCHILLER' or paragraphs[-1].get('text') != 'ENDE':
-              raise RuntimeError('Beginning or ending is missing')
-          if len(data.get('acts', [])) != 5 or len(data.get('scenes', [])) != 15:
-              raise RuntimeError('Act or scene structure is incomplete')
+          valid_data = None
+          winning_variant = None
+          for name, value in variants.items():
+              padded = value.rstrip('=')
+              padded += '=' * ((4 - len(padded) % 4) % 4)
+              item = {'name': name, 'length': len(value), 'padded_length': len(padded)}
+              try:
+                  decoded = base64.b64decode(padded, validate=True)
+                  item['decoded_length'] = len(decoded)
+                  item['magic_hex'] = decoded[:8].hex()
+                  raw = gzip.decompress(decoded).decode('utf-8')
+                  item['gzip_text_length'] = len(raw)
+                  data = json.loads(raw)
+                  item['title'] = data.get('title')
+                  item['paragraphs'] = len(data.get('paragraphs', []))
+                  item['acts'] = len(data.get('acts', []))
+                  item['scenes'] = len(data.get('scenes', []))
+                  item['first'] = data.get('paragraphs', [{}])[0].get('text')
+                  item['last'] = data.get('paragraphs', [{}])[-1].get('text')
+                  if (
+                      data.get('title') == 'Die Räuber'
+                      and item['paragraphs'] == 1457
+                      and item['acts'] == 5
+                      and item['scenes'] == 15
+                      and item['first'] == 'FRIEDRICH SCHILLER'
+                      and item['last'] == 'ENDE'
+                  ):
+                      valid_data = data
+                      winning_variant = name
+                      item['valid'] = True
+              except Exception as error:
+                  item['error'] = f'{type(error).__name__}: {error}'
+              report['variants'].append(item)
 
-          for paragraph in paragraphs:
-              paragraph['page'] = max(0, int(paragraph.get('page', 1)) - 1)
-          for key in ('acts', 'scenes', 'pages'):
-              for entry in data.get(key, []):
-                  if 'page' in entry:
-                      entry['page'] = max(0, int(entry['page']) - 1)
-          data['pageCount'] = 63
-          data['physicalPageCount'] = 64
-          data['paragraphCount'] = len(paragraphs)
-
-          source = (
-              'window.THEATER_SCRIPT='
-              + json.dumps(data, ensure_ascii=False, separators=(',', ':'))
-              + ';\nwindow.loadTheaterScript=async()=>window.THEATER_SCRIPT;\n'
+          report['winning_variant'] = winning_variant
+          Path('/tmp/theater-diagnostic.json').write_text(
+              json.dumps(report, ensure_ascii=False, indent=2), encoding='utf-8'
           )
-          Path('/tmp/theater-data.js').write_text(source, encoding='utf-8')
-          print(f'Validated {len(paragraphs)} paragraphs, {len(data["acts"])} acts, {len(data["scenes"])} scenes')
-          PY
-          node --check /tmp/theater-data.js
 
-      - name: Commit only to isolated repair branch
+          if valid_data is not None:
+              for paragraph in valid_data['paragraphs']:
+                  paragraph['page'] = max(0, int(paragraph.get('page', 1)) - 1)
+              for key in ('acts', 'scenes', 'pages'):
+                  for entry in valid_data.get(key, []):
+                      if 'page' in entry:
+                          entry['page'] = max(0, int(entry['page']) - 1)
+              valid_data['pageCount'] = 63
+              valid_data['physicalPageCount'] = 64
+              valid_data['paragraphCount'] = len(valid_data['paragraphs'])
+              source = (
+                  'window.THEATER_SCRIPT='
+                  + json.dumps(valid_data, ensure_ascii=False, separators=(',', ':'))
+                  + ';\nwindow.loadTheaterScript=async()=>window.THEATER_SCRIPT;\n'
+              )
+              Path('/tmp/theater-data.js').write_text(source, encoding='utf-8')
+          PY
+          if test -f /tmp/theater-data.js; then node --check /tmp/theater-data.js; fi
+
+      - name: Commit diagnostic and any validated result to repair branch
         shell: bash
         run: |
           set -euo pipefail
           git fetch origin repair/direct-data-v8
           git checkout repair/direct-data-v8
-          cp /tmp/theater-data.js theater-data.js
+          mkdir -p .audit
+          cp /tmp/theater-diagnostic.json .audit/theater-diagnostic.json
+          if test -f /tmp/theater-data.js; then cp /tmp/theater-data.js theater-data.js; fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add theater-data.js
+          git add .audit/theater-diagnostic.json
+          if test -f theater-data.js; then git add theater-data.js; fi
           if git diff --cached --quiet; then
-            echo 'Direct data is already current.'
+            echo 'Diagnostic is already current.'
             exit 0
           fi
-          git commit -m 'Generate validated direct Die Räuber data'
+          git commit -m 'Record theater data reconstruction diagnostic'
           git push origin HEAD:repair/direct-data-v8
