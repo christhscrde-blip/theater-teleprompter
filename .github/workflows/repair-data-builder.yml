@@ -1,5 +1,6 @@
 name: Isolated verified theater data repair
 
+# This temporary workflow writes only to the isolated repair branch.
 on:
   push:
     branches: [main]
