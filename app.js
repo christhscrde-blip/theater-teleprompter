@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = 8;
+  const VERSION = 10;
   const STORAGE_KEY = 'theater-teleprompter-settings-v3';
   const $ = selector => document.querySelector(selector);
 
