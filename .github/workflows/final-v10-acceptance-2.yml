@@ -1,0 +1,218 @@
+name: Final version 10 acceptance verified
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: final-v10-verified-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  acceptance:
+    if: github.event.pull_request.head.ref == 'hotfix/direct-json-v10'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+
+      - name: Verify runtime structure
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'JS'
+          const fs = require('node:fs');
+          for (const file of ['index.html', 'styles.css', 'hotfix-v10.css', 'app.js', 'theater-data.js', 'service-worker.js', 'manifest.webmanifest']) {
+            if (!fs.existsSync(file)) throw new Error(`Missing ${file}`);
+          }
+          for (const removed of ['theater-loader.js', 'theater-payload-01.txt', 'theater-payload-02.txt', 'theater-payload-03.txt', 'theater-payload-04.txt']) {
+            if (fs.existsSync(removed)) throw new Error(`Obsolete runtime file still exists: ${removed}`);
+          }
+          const html = fs.readFileSync('index.html', 'utf8');
+          const app = fs.readFileSync('app.js', 'utf8');
+          const sw = fs.readFileSync('service-worker.js', 'utf8');
+          const requiredHtml = ['theater-data.js?v=10', 'app.js?v=10', 'hotfix-v10.css?v=10', 'id="presentationExitButton"'];
+          for (const marker of requiredHtml) if (!html.includes(marker)) throw new Error(`HTML marker missing: ${marker}`);
+          for (const marker of ["presentationExitButton: $('#presentationExitButton')", "elements.presentationExitButton.addEventListener('click', toggleFullscreen)", 'const VERSION = 10;']) {
+            if (!app.includes(marker)) throw new Error(`App marker missing: ${marker}`);
+          }
+          for (const marker of ['theater-teleprompter-v10', 'hotfix-v10.css?v=10', 'theater-data.js?v=10']) {
+            if (!sw.includes(marker)) throw new Error(`Service-worker marker missing: ${marker}`);
+          }
+          JS
+          node --check theater-data.js
+          node --check app.js
+          node --check service-worker.js
+
+      - name: Install Chromium
+        shell: bash
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install --no-save playwright@1.55.0 >/dev/null
+          npx playwright install --with-deps chromium >/dev/null
+
+      - name: Start isolated server
+        shell: bash
+        run: |
+          python3 -m http.server 4173 --bind 127.0.0.1 >/tmp/server.log 2>&1 &
+          curl --retry 20 --retry-delay 1 --retry-connrefused -fsS http://127.0.0.1:4173/ >/dev/null
+
+      - name: Test desktop, iPad and iPhone
+        shell: bash
+        run: |
+          node <<'JS'
+          const assert = require('node:assert/strict');
+          const { chromium } = require('playwright');
+          const URL = 'http://127.0.0.1:4173/?verified=v10';
+
+          async function waitForApp(page) {
+            await page.waitForFunction(() => {
+              const state = window.__TELEPROMPTER__?.getState?.();
+              return state?.version === 10 && state?.paragraphs === 1457 && state?.currentPage === 1;
+            }, null, { timeout: 15000 });
+          }
+
+          async function makePage(browser, name, viewport) {
+            const context = await browser.newContext({ viewport, serviceWorkers: 'allow' });
+            await context.addInitScript(() => {
+              try {
+                Object.defineProperty(Document.prototype, 'fullscreenEnabled', { configurable: true, get: () => false });
+              } catch {}
+            });
+            const page = await context.newPage();
+            const errors = [];
+            page.on('pageerror', error => errors.push(`pageerror: ${error.message}`));
+            page.on('console', message => { if (message.type() === 'error') errors.push(`console: ${message.text()}`); });
+            const response = await page.goto(URL, { waitUntil: 'networkidle' });
+            assert.equal(response.status(), 200, `${name}: HTTP`);
+            await waitForApp(page);
+            return { context, page, errors };
+          }
+
+          async function assertCore(page, name) {
+            const state = await page.evaluate(() => window.__TELEPROMPTER__.getState());
+            assert.deepEqual(
+              [state.version, state.title, state.paragraphs, state.pages, state.acts, state.scenes, state.currentPage],
+              [10, 'Die Räuber', 1457, 63, 5, 15, 1],
+              `${name}: exact state`,
+            );
+            assert.equal(await page.getByText('Fehler beim Laden').count(), 0, `${name}: no loading error`);
+            assert.equal(await page.locator('.script-line').count(), 1457, `${name}: complete rendering`);
+            assert.equal(await page.locator('.script-line').first().textContent(), 'FRIEDRICH SCHILLER');
+            assert.equal(await page.locator('.script-line').last().textContent(), 'ENDE');
+          }
+
+          async function assertPresentation(page, name) {
+            await page.locator('#fullscreenButton').click();
+            await page.waitForFunction(() => window.__TELEPROMPTER__.getState().presentation === true);
+            const exit = page.locator('#presentationExitButton');
+            await exit.waitFor({ state: 'visible' });
+            await exit.click();
+            await page.waitForFunction(() => window.__TELEPROMPTER__.getState().presentation === false);
+            assert.equal(await exit.isVisible(), false, `${name}: exit hides after leaving`);
+          }
+
+          async function setRange(page, selector, value) {
+            await page.locator(selector).evaluate((element, next) => {
+              element.value = String(next);
+              element.dispatchEvent(new Event('input', { bubbles: true }));
+            }, value);
+          }
+
+          (async () => {
+            const browser = await chromium.launch({ headless: true });
+            try {
+              const desktop = await makePage(browser, 'desktop', { width: 1440, height: 900 });
+              await assertCore(desktop.page, 'desktop');
+
+              assert.equal(await desktop.page.locator('.nav-link').count(), 5);
+              await desktop.page.locator('[data-nav="scenes"]').click();
+              assert.equal(await desktop.page.locator('.nav-link').count(), 15);
+              await desktop.page.locator('[data-nav="pages"]').click();
+              assert.equal(await desktop.page.locator('.nav-link').count(), 64);
+
+              await desktop.page.locator('#pageInput').fill('63');
+              await desktop.page.locator('#pageJumpButton').click();
+              await desktop.page.waitForFunction(() => window.__TELEPROMPTER__.getState().currentPage === 63);
+              await desktop.page.locator('#previousPageButton').click();
+              await desktop.page.waitForFunction(() => window.__TELEPROMPTER__.getState().currentPage === 62);
+              await desktop.page.locator('#nextPageButton').click();
+              await desktop.page.waitForFunction(() => window.__TELEPROMPTER__.getState().currentPage === 63);
+
+              await desktop.page.evaluate(() => window.__TELEPROMPTER__.jumpToPage(1));
+              await desktop.page.waitForTimeout(100);
+              const before = await desktop.page.locator('#stage').evaluate(element => element.scrollTop);
+              await desktop.page.locator('#playButton').click();
+              await desktop.page.waitForTimeout(900);
+              const after = await desktop.page.locator('#stage').evaluate(element => element.scrollTop);
+              assert(after > before + 5, `auto-scroll ${before} -> ${after}`);
+              await desktop.page.locator('#playButton').click();
+
+              await setRange(desktop.page, '#speedInput', 50);
+              await setRange(desktop.page, '#fontInput', 54);
+              await setRange(desktop.page, '#lineHeightInput', 1.7);
+              assert.equal(await desktop.page.locator('#speedValue').textContent(), '50');
+              assert.equal(await desktop.page.locator('#fontValue').textContent(), '54');
+              assert.equal(await desktop.page.locator('#lineHeightValue').textContent(), '1.70');
+
+              await desktop.page.locator('#themeButton').click();
+              assert.equal(await desktop.page.locator('body').evaluate(element => element.classList.contains('dark')), false);
+              await desktop.page.locator('#themeButton').click();
+              await assertPresentation(desktop.page, 'desktop');
+
+              await desktop.page.keyboard.press('ArrowRight');
+              await desktop.page.waitForFunction(() => window.__TELEPROMPTER__.getState().currentPage === 2);
+              await desktop.page.keyboard.press('ArrowLeft');
+              await desktop.page.waitForFunction(() => window.__TELEPROMPTER__.getState().currentPage === 1);
+              await desktop.page.keyboard.press('Space');
+              await desktop.page.waitForFunction(() => window.__TELEPROMPTER__.getState().isPlaying === true);
+              await desktop.page.keyboard.press('Space');
+              await desktop.page.waitForFunction(() => window.__TELEPROMPTER__.getState().isPlaying === false);
+
+              await desktop.page.reload({ waitUntil: 'networkidle' });
+              await waitForApp(desktop.page);
+              assert.equal(await desktop.page.locator('#speedValue').textContent(), '50');
+              assert.equal(await desktop.page.locator('#fontValue').textContent(), '54');
+
+              await desktop.page.evaluate(() => navigator.serviceWorker.ready);
+              await desktop.page.reload({ waitUntil: 'networkidle' });
+              await desktop.page.waitForFunction(() => navigator.serviceWorker.controller !== null);
+              await waitForApp(desktop.page);
+              await desktop.context.setOffline(true);
+              await desktop.page.reload({ waitUntil: 'domcontentloaded', timeout: 10000 });
+              await waitForApp(desktop.page);
+              await desktop.context.setOffline(false);
+              assert.deepEqual(desktop.errors, [], 'desktop browser errors');
+              await desktop.context.close();
+
+              for (const [name, viewport] of [['iPad', { width: 820, height: 1180 }], ['iPhone', { width: 390, height: 844 }]]) {
+                const device = await makePage(browser, name, viewport);
+                await assertCore(device.page, name);
+                await device.page.locator('#menuButton').click();
+                assert(await device.page.locator('body').evaluate(element => element.classList.contains('menu-open')));
+                await device.page.locator('#closeMenuButton').click();
+                assert.equal(await device.page.locator('body').evaluate(element => element.classList.contains('menu-open')), false);
+                await assertPresentation(device.page, name);
+                assert.deepEqual(device.errors, [], `${name} browser errors`);
+                await device.context.close();
+              }
+
+              console.log('All final version 10 acceptance checks passed.');
+            } finally {
+              await browser.close();
+            }
+          })().catch(error => {
+            console.error(error);
+            process.exit(1);
+          });
+          JS
+
+      - name: Show server log on failure
+        if: failure()
+        run: cat /tmp/server.log || true
