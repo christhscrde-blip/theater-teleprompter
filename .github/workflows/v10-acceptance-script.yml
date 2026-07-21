@@ -1,0 +1,51 @@
+name: Stable version 10 acceptance
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  acceptance:
+    if: github.event.pull_request.head.ref == 'hotfix/direct-json-v10'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+
+      - name: Verify source files
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f theater-data.js
+          test -f tests/v10-acceptance.cjs
+          test ! -f theater-loader.js
+          node --check theater-data.js
+          node --check app.js
+          node --check service-worker.js
+          node --check tests/v10-acceptance.cjs
+
+      - name: Install Chromium
+        shell: bash
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install --no-save playwright@1.55.0 >/dev/null
+          npx playwright install --with-deps chromium >/dev/null
+
+      - name: Start isolated server
+        shell: bash
+        run: |
+          python3 -m http.server 4173 --bind 127.0.0.1 >/tmp/server.log 2>&1 &
+          curl --retry 20 --retry-delay 1 --retry-connrefused -fsS http://127.0.0.1:4173/ >/dev/null
+
+      - name: Run acceptance script
+        run: node tests/v10-acceptance.cjs
+
+      - name: Show server log on failure
+        if: failure()
+        run: cat /tmp/server.log || true
