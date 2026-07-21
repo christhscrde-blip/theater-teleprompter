@@ -1,0 +1,57 @@
+{
+  "files": [
+    {
+      "file": "theater-payload-01.txt",
+      "rawLength": 15711,
+      "cleanLength": 15711,
+      "paddingCount": 0,
+      "moduloWithoutPadding": 3,
+      "starts": "H4sIAM14X2oC/9y9",
+      "ends": "PTxMiHJt0Ujcl/Gf"
+    },
+    {
+      "file": "theater-payload-02.txt",
+      "rawLength": 15710,
+      "cleanLength": 15710,
+      "paddingCount": 0,
+      "moduloWithoutPadding": 2,
+      "starts": "gyNhgzju49ED40Wk",
+      "ends": "ElqeXptyp9YucA7X"
+    },
+    {
+      "file": "theater-payload-03.txt",
+      "rawLength": 15710,
+      "cleanLength": 15710,
+      "paddingCount": 0,
+      "moduloWithoutPadding": 2,
+      "starts": "+hQl8bbpUb2JZ/no",
+      "ends": "6V0y3lcMRfBJEfWt"
+    },
+    {
+      "file": "theater-payload-04.txt",
+      "rawLength": 18306,
+      "cleanLength": 18306,
+      "paddingCount": 0,
+      "moduloWithoutPadding": 2,
+      "starts": "RMkiepzBcf00sV8e",
+      "ends": "6T8v8PoCgUkMDwAA"
+    }
+  ],
+  "strategies": {
+    "joined_without_padding": {
+      "success": false,
+      "errorType": "Error",
+      "error": "Invalid base64-encoded string: number of data characters (65437) cannot be 1 more than a multiple of 4"
+    },
+    "decode_each_then_join_bytes": {
+      "success": false,
+      "errorType": "BadGzipFile",
+      "error": "CRC check failed"
+    },
+    "longest_run_per_file": {
+      "success": false,
+      "errorType": "BadGzipFile",
+      "error": "CRC check failed"
+    }
+  }
+}
