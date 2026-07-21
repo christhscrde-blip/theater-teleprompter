@@ -1,0 +1,232 @@
+name: Diagnose browser functions
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: browser-diagnostic-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  diagnose:
+    if: github.event.pull_request.head.ref == 'hotfix/direct-json-v10'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout hotfix branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+
+      - name: Install Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install --no-save playwright@1.55.0 >/dev/null
+          npx playwright install --with-deps chromium >/dev/null
+
+      - name: Start server
+        run: |
+          python3 -m http.server 4173 --bind 127.0.0.1 >/tmp/server.log 2>&1 &
+          curl --retry 20 --retry-delay 1 --retry-connrefused -fsS http://127.0.0.1:4173/ >/dev/null
+
+      - name: Run isolated checks
+        shell: bash
+        run: |
+          node <<'JS'
+          const fs = require('node:fs');
+          const { chromium } = require('playwright');
+          const report = { checks: [], success: false };
+
+          async function check(name, callback) {
+            try {
+              const detail = await callback();
+              report.checks.push({ name, success: true, detail: detail ?? null });
+            } catch (error) {
+              report.checks.push({ name, success: false, error: error.message, stack: error.stack });
+            }
+          }
+
+          (async () => {
+            const browser = await chromium.launch({ headless: true });
+            const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, serviceWorkers: 'allow' });
+            await context.addInitScript(() => {
+              try {
+                Object.defineProperty(Document.prototype, 'fullscreenEnabled', { configurable: true, get: () => false });
+              } catch {}
+            });
+            const page = await context.newPage();
+            page.setDefaultTimeout(7000);
+            const browserErrors = [];
+            page.on('pageerror', error => browserErrors.push(`pageerror: ${error.message}`));
+            page.on('console', message => { if (message.type() === 'error') browserErrors.push(`console: ${message.text()}`); });
+
+            await check('initial-load', async () => {
+              const response = await page.goto('http://127.0.0.1:4173/?diagnostic=v10', { waitUntil: 'networkidle' });
+              if (response.status() !== 200) throw new Error(`HTTP ${response.status()}`);
+              await page.waitForFunction(() => window.__TELEPROMPTER__?.getState?.().paragraphs === 1457);
+              const state = await page.evaluate(() => window.__TELEPROMPTER__.getState());
+              if (state.version !== 10 || state.title !== 'Die Räuber' || state.pages !== 63 || state.acts !== 5 || state.scenes !== 15) {
+                throw new Error(`Unexpected state ${JSON.stringify(state)}`);
+              }
+              if (await page.getByText('Fehler beim Laden').count()) throw new Error('Visible loading error');
+              const lines = await page.locator('.script-line').count();
+              if (lines !== 1457) throw new Error(`Rendered ${lines}/1457 lines`);
+              return state;
+            });
+
+            await check('act-navigation', async () => {
+              const count = await page.locator('.nav-link').count();
+              if (count !== 5) throw new Error(`Expected 5, got ${count}`);
+              return count;
+            });
+
+            await check('scene-navigation', async () => {
+              await page.locator('[data-nav="scenes"]').click();
+              const count = await page.locator('.nav-link').count();
+              if (count !== 15) throw new Error(`Expected 15, got ${count}`);
+              return count;
+            });
+
+            await check('page-navigation-list', async () => {
+              await page.locator('[data-nav="pages"]').click();
+              const count = await page.locator('.nav-link').count();
+              if (count !== 64) throw new Error(`Expected 64, got ${count}`);
+              return count;
+            });
+
+            await check('page-jump-63', async () => {
+              await page.locator('#pageInput').fill('63');
+              await page.locator('#pageJumpButton').click();
+              await page.waitForFunction(() => window.__TELEPROMPTER__.getState().currentPage === 63);
+              return await page.locator('#pageText').textContent();
+            });
+
+            await check('previous-next-page', async () => {
+              await page.locator('#previousPageButton').click();
+              await page.waitForFunction(() => window.__TELEPROMPTER__.getState().currentPage === 62);
+              await page.locator('#nextPageButton').click();
+              await page.waitForFunction(() => window.__TELEPROMPTER__.getState().currentPage === 63);
+              return 63;
+            });
+
+            await check('auto-scroll', async () => {
+              await page.evaluate(() => window.__TELEPROMPTER__.jumpToPage(1));
+              await page.waitForTimeout(100);
+              const before = await page.locator('#stage').evaluate(element => element.scrollTop);
+              await page.locator('#playButton').click();
+              await page.waitForTimeout(900);
+              const after = await page.locator('#stage').evaluate(element => element.scrollTop);
+              await page.locator('#playButton').click();
+              if (after <= before + 5) throw new Error(`Scroll did not advance: ${before} -> ${after}`);
+              return { before, after };
+            });
+
+            await check('controls', async () => {
+              for (const [selector, value] of [['#speedInput', 50], ['#fontInput', 54], ['#lineHeightInput', 1.7]]) {
+                await page.locator(selector).evaluate((element, next) => {
+                  element.value = String(next);
+                  element.dispatchEvent(new Event('input', { bubbles: true }));
+                }, value);
+              }
+              const values = {
+                speed: await page.locator('#speedValue').textContent(),
+                font: await page.locator('#fontValue').textContent(),
+                lineHeight: await page.locator('#lineHeightValue').textContent(),
+              };
+              if (values.speed !== '50' || values.font !== '54' || values.lineHeight !== '1.70') throw new Error(JSON.stringify(values));
+              return values;
+            });
+
+            await check('theme', async () => {
+              await page.locator('#themeButton').click();
+              const light = !(await page.locator('body').evaluate(element => element.classList.contains('dark')));
+              await page.locator('#themeButton').click();
+              if (!light) throw new Error('Light mode did not activate');
+              return light;
+            });
+
+            await check('presentation-mode', async () => {
+              await page.locator('#fullscreenButton').click();
+              await page.waitForFunction(() => window.__TELEPROMPTER__.getState().presentation === true);
+              await page.locator('#fullscreenButton').click();
+              await page.waitForFunction(() => window.__TELEPROMPTER__.getState().presentation === false);
+              return true;
+            });
+
+            await check('keyboard', async () => {
+              await page.evaluate(() => window.__TELEPROMPTER__.jumpToPage(1));
+              await page.keyboard.press('ArrowRight');
+              await page.waitForFunction(() => window.__TELEPROMPTER__.getState().currentPage === 2);
+              await page.keyboard.press('ArrowLeft');
+              await page.waitForFunction(() => window.__TELEPROMPTER__.getState().currentPage === 1);
+              await page.keyboard.press('Space');
+              await page.waitForFunction(() => window.__TELEPROMPTER__.getState().isPlaying === true);
+              await page.keyboard.press('Space');
+              await page.waitForFunction(() => window.__TELEPROMPTER__.getState().isPlaying === false);
+              return true;
+            });
+
+            await check('saved-settings', async () => {
+              await page.reload({ waitUntil: 'networkidle' });
+              await page.waitForFunction(() => window.__TELEPROMPTER__?.getState?.().paragraphs === 1457);
+              const speed = await page.locator('#speedValue').textContent();
+              const font = await page.locator('#fontValue').textContent();
+              if (speed !== '50' || font !== '54') throw new Error(`Saved speed/font: ${speed}/${font}`);
+              return { speed, font };
+            });
+
+            await check('offline-cache', async () => {
+              await page.evaluate(() => navigator.serviceWorker.ready);
+              await page.reload({ waitUntil: 'networkidle' });
+              await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
+              await page.waitForFunction(() => window.__TELEPROMPTER__?.getState?.().paragraphs === 1457);
+              await context.setOffline(true);
+              await page.reload({ waitUntil: 'domcontentloaded', timeout: 10000 });
+              await page.waitForFunction(() => window.__TELEPROMPTER__?.getState?.().paragraphs === 1457, null, { timeout: 10000 });
+              await context.setOffline(false);
+              return true;
+            });
+
+            report.browserErrors = browserErrors;
+            report.success = report.checks.every(item => item.success) && browserErrors.length === 0;
+            await context.close();
+            await browser.close();
+          })().catch(error => {
+            report.fatal = { error: error.message, stack: error.stack };
+            report.success = false;
+          }).finally(() => {
+            fs.writeFileSync('/tmp/browser-diagnostic.json', JSON.stringify(report, null, 2) + '\n');
+          });
+          JS
+
+      - name: Store diagnostic report
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f /tmp/browser-diagnostic.json
+          mkdir -p .audit
+          cp /tmp/browser-diagnostic.json .audit/browser-diagnostic.json
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .audit/browser-diagnostic.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Record isolated browser diagnostic'
+            git push origin "HEAD:${{ github.event.pull_request.head.ref }}"
+          fi
+
+      - name: Require all checks to pass
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          report = json.load(open('/tmp/browser-diagnostic.json', encoding='utf-8'))
+          if not report.get('success'):
+              raise SystemExit(1)
+          PY
