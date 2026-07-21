@@ -1,0 +1,20 @@
+.presentation-exit {
+  display: none;
+  position: fixed;
+  top: max(12px, env(safe-area-inset-top));
+  right: max(12px, env(safe-area-inset-right));
+  z-index: 120;
+  min-height: 44px;
+  padding: 10px 14px;
+  background: rgba(24, 24, 29, .92);
+  color: #f6f2e9;
+  border: 1px solid #3a3a42;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .35);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+
+body.presentation .presentation-exit,
+:fullscreen .presentation-exit {
+  display: block;
+}

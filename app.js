@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const VERSION = 8;
+  const VERSION = 10;
   const STORAGE_KEY = 'theater-teleprompter-settings-v3';
   const $ = selector => document.querySelector(selector);
 
@@ -29,6 +29,7 @@
     lineHeightValue: $('#lineHeightValue'),
     themeButton: $('#themeButton'),
     fullscreenButton: $('#fullscreenButton'),
+    presentationExitButton: $('#presentationExitButton'),
     locationText: $('#locationText'),
     pageText: $('#pageText'),
     progressText: $('#progressText')
@@ -401,6 +402,7 @@
     elements.sidebarBackdrop.addEventListener('click', closeMenu);
     elements.themeButton.addEventListener('click', toggleTheme);
     elements.fullscreenButton.addEventListener('click', toggleFullscreen);
+    elements.presentationExitButton.addEventListener('click', toggleFullscreen);
 
     elements.speedInput.addEventListener('input', () => { updateControlLabels(); saveSettings(); });
     elements.fontInput.addEventListener('input', () => { updateControlLabels(); saveSettings(); updatePosition(); });
@@ -458,6 +460,7 @@
     window.__TELEPROMPTER__ = {
       version: VERSION,
       getState: () => ({
+        version: VERSION,
         title: script.title,
         paragraphs: script.paragraphs.length,
         pages: script.pageCount,

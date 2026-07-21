@@ -1,15 +1,12 @@
-const CACHE_NAME = 'theater-teleprompter-v9';
+const CACHE_NAME = 'theater-teleprompter-v10';
 const CORE_ASSETS = [
   './',
   './index.html',
-  './styles.css?v=9',
-  './app.js?v=9',
-  './theater-loader.js?v=9',
-  './theater-payload-01.txt?v=9',
-  './theater-payload-02.txt?v=9',
-  './theater-payload-03.txt?v=9',
-  './theater-payload-04.txt?v=9',
-  './manifest.webmanifest?v=9'
+  './styles.css?v=10',
+  './hotfix-v10.css?v=10',
+  './app.js?v=10',
+  './theater-data.js?v=10',
+  './manifest.webmanifest?v=10'
 ];
 
 self.addEventListener('install', event => {
@@ -19,20 +16,25 @@ self.addEventListener('install', event => {
 
 self.addEventListener('activate', event => {
   event.waitUntil(
-    caches.keys().then(keys => Promise.all(keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key))))
+    caches.keys().then(keys => Promise.all(
+      keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key))
+    ))
   );
   self.clients.claim();
 });
 
 self.addEventListener('fetch', event => {
   const request = event.request;
-  if (request.method !== 'GET' || new URL(request.url).origin !== self.location.origin) return;
+  const url = new URL(request.url);
+  if (request.method !== 'GET' || url.origin !== self.location.origin) return;
 
   if (request.mode === 'navigate') {
     event.respondWith(
       fetch(request, { cache: 'no-store' })
         .then(response => {
-          if (response.ok) caches.open(CACHE_NAME).then(cache => cache.put('./index.html', response.clone()));
+          if (response.ok) {
+            caches.open(CACHE_NAME).then(cache => cache.put('./index.html', response.clone()));
+          }
           return response;
         })
         .catch(() => caches.match('./index.html'))
@@ -41,12 +43,11 @@ self.addEventListener('fetch', event => {
   }
 
   event.respondWith(
-    caches.match(request).then(cached => {
-      if (cached) return cached;
-      return fetch(request).then(response => {
-        if (response.ok) caches.open(CACHE_NAME).then(cache => cache.put(request, response.clone()));
-        return response;
-      });
-    })
+    caches.match(request).then(cached => cached || fetch(request).then(response => {
+      if (response.ok) {
+        caches.open(CACHE_NAME).then(cache => cache.put(request, response.clone()));
+      }
+      return response;
+    }))
   );
 });

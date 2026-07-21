@@ -1,0 +1,95 @@
+{
+  "checks": [
+    {
+      "name": "initial-load",
+      "success": true,
+      "detail": {
+        "version": 10,
+        "title": "Die Räuber",
+        "paragraphs": 1457,
+        "pages": 63,
+        "acts": 5,
+        "scenes": 15,
+        "currentPage": 1,
+        "activeParagraphIndex": 4,
+        "isPlaying": false,
+        "activeNavigation": "acts",
+        "dark": true,
+        "presentation": false
+      }
+    },
+    {
+      "name": "act-navigation",
+      "success": true,
+      "detail": 5
+    },
+    {
+      "name": "scene-navigation",
+      "success": true,
+      "detail": 15
+    },
+    {
+      "name": "page-navigation-list",
+      "success": true,
+      "detail": 64
+    },
+    {
+      "name": "page-jump-63",
+      "success": true,
+      "detail": "Seite 63"
+    },
+    {
+      "name": "previous-next-page",
+      "success": true,
+      "detail": 63
+    },
+    {
+      "name": "auto-scroll",
+      "success": true,
+      "detail": {
+        "before": 490,
+        "after": 511
+      }
+    },
+    {
+      "name": "controls",
+      "success": true,
+      "detail": {
+        "speed": "50",
+        "font": "54",
+        "lineHeight": "1.70"
+      }
+    },
+    {
+      "name": "theme",
+      "success": true,
+      "detail": true
+    },
+    {
+      "name": "presentation-mode",
+      "success": false,
+      "error": "locator.click: Timeout 7000ms exceeded.\nCall log:\n  - waiting for locator('#fullscreenButton')\n    - locator resolved to <button type=\"button\" class=\"secondary\" id=\"fullscreenButton\">Vollbild verlassen</button>\n  - attempting click action\n    2 × waiting for element to be visible, enabled and stable\n      - element is not visible\n    - retrying click action\n    - waiting 20ms\n    2 × waiting for element to be visible, enabled and stable\n      - element is not visible\n    - retrying click action\n      - waiting 100ms\n    13 × waiting for element to be visible, enabled and stable\n       - element is not visible\n     - retrying click action\n       - waiting 500ms\n",
+      "stack": "locator.click: Timeout 7000ms exceeded.\nCall log:\n  - waiting for locator('#fullscreenButton')\n    - locator resolved to <button type=\"button\" class=\"secondary\" id=\"fullscreenButton\">Vollbild verlassen</button>\n  - attempting click action\n    2 × waiting for element to be visible, enabled and stable\n      - element is not visible\n    - retrying click action\n    - waiting 20ms\n    2 × waiting for element to be visible, enabled and stable\n      - element is not visible\n    - retrying click action\n      - waiting 100ms\n    13 × waiting for element to be visible, enabled and stable\n       - element is not visible\n     - retrying click action\n       - waiting 500ms\n\n    at [stdin]:116:45\n    at async check ([stdin]:7:20)\n    at async [stdin]:113:3"
+    },
+    {
+      "name": "keyboard",
+      "success": true,
+      "detail": true
+    },
+    {
+      "name": "saved-settings",
+      "success": true,
+      "detail": {
+        "speed": "50",
+        "font": "54"
+      }
+    },
+    {
+      "name": "offline-cache",
+      "success": true,
+      "detail": true
+    }
+  ],
+  "success": false,
+  "browserErrors": []
+}
