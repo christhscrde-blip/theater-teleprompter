@@ -1,0 +1,104 @@
+{
+  "files": [
+    {
+      "name": "data/chunk-01.js",
+      "length": 7000,
+      "invalid_chars": 0,
+      "padding_count": 0,
+      "starts": "H4sIAAFHX2oC",
+      "ends": "BbYGvH/GzFMu"
+    },
+    {
+      "name": "data/chunk-02.js",
+      "length": 7000,
+      "invalid_chars": 0,
+      "padding_count": 0,
+      "starts": "NoPFImcemGug",
+      "ends": "mGkdtgINYLEp"
+    },
+    {
+      "name": "data/chunk-03.js",
+      "length": 7000,
+      "invalid_chars": 0,
+      "padding_count": 0,
+      "starts": "IRH3yRqIgbug",
+      "ends": "rg5vTNqJXN+L"
+    },
+    {
+      "name": "data/chunk-04.js",
+      "length": 7000,
+      "invalid_chars": 0,
+      "padding_count": 0,
+      "starts": "p16U8ipPQZ0R",
+      "ends": "hVuLcEKkXcSz"
+    },
+    {
+      "name": "data/chunk-05.js",
+      "length": 7000,
+      "invalid_chars": 0,
+      "padding_count": 0,
+      "starts": "tiw+jUUVjBnW",
+      "ends": "0OelBm7PCXhU"
+    },
+    {
+      "name": "data/chunk-06.js",
+      "length": 7000,
+      "invalid_chars": 0,
+      "padding_count": 0,
+      "starts": "Nz03XQ2fqdhp",
+      "ends": "a6iuKtUulKxL"
+    },
+    {
+      "name": "data/chunk-07.js",
+      "length": 7000,
+      "invalid_chars": 0,
+      "padding_count": 0,
+      "starts": "ylGzy/p2soEN",
+      "ends": "NGnUyZv0mitm"
+    },
+    {
+      "name": "data/chunk-08.js",
+      "length": 7000,
+      "invalid_chars": 0,
+      "padding_count": 0,
+      "starts": "CgRctnHT9vlG",
+      "ends": "zvN00Urw0reH"
+    },
+    {
+      "name": "data/chunk-09.js",
+      "length": 5957,
+      "invalid_chars": 0,
+      "padding_count": 0,
+      "starts": "qq3V25Pzm1+J",
+      "ends": "A2xkybdERQMA"
+    }
+  ],
+  "variants": [
+    {
+      "name": "joined_as_is",
+      "length": 61957,
+      "padded_length": 61960,
+      "error": "Error: Invalid base64-encoded string: number of data characters (61957) cannot be 1 more than a multiple of 4"
+    },
+    {
+      "name": "invalid_removed",
+      "length": 61957,
+      "padded_length": 61960,
+      "error": "Error: Invalid base64-encoded string: number of data characters (61957) cannot be 1 more than a multiple of 4"
+    },
+    {
+      "name": "all_padding_rebuilt",
+      "length": 61957,
+      "padded_length": 61960,
+      "error": "Error: Invalid base64-encoded string: number of data characters (61957) cannot be 1 more than a multiple of 4"
+    },
+    {
+      "name": "per_chunk_padding_removed",
+      "length": 61957,
+      "padded_length": 61960,
+      "error": "Error: Invalid base64-encoded string: number of data characters (61957) cannot be 1 more than a multiple of 4"
+    }
+  ],
+  "file_count": 9,
+  "winning_variant": null
+}
