@@ -1,15 +1,32 @@
-const CACHE_NAME = 'theater-teleprompter-v5';
+const CACHE_NAME = 'theater-teleprompter-v7';
 const ASSETS = [
   './',
   './index.html',
-  './styles.css?v=5',
-  './app.js?v=5',
-  './script-direct.js?v=5',
-  './manifest.webmanifest?v=5'
+  './styles.css?v=7',
+  './app.js?v=7',
+  './script-data.js?v=7',
+  './manifest.webmanifest?v=7',
+  './data/chunk-01.js?v=7',
+  './data/chunk-02.js?v=7',
+  './data/chunk-03.js?v=7',
+  './data/chunk-04.js?v=7',
+  './data/chunk-05.js?v=7',
+  './data/chunk-06.js?v=7',
+  './data/chunk-07.js?v=7',
+  './data/chunk-08.js?v=7',
+  './data/chunk-09.js?v=7'
 ];
 
 self.addEventListener('install', event => {
-  event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(ASSETS)));
+  event.waitUntil(
+    caches.open(CACHE_NAME).then(async cache => {
+      for (const asset of ASSETS) {
+        const response = await fetch(asset, { cache: 'reload' });
+        if (!response.ok) throw new Error(`Asset nicht verfügbar: ${asset}`);
+        await cache.put(asset, response);
+      }
+    })
+  );
   self.skipWaiting();
 });
 
