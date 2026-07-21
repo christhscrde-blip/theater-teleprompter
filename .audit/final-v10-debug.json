@@ -1,0 +1,7 @@
+{
+  "success": false,
+  "step": "desktop-core",
+  "browserErrors": [],
+  "error": "page.evaluate: Right-hand side of 'instanceof' is not an object",
+  "stack": "page.evaluate: Right-hand side of 'instanceof' is not an object\n    at [stdin]:52:28"
+}
