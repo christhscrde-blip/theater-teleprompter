@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   audit-payloads:
@@ -17,8 +17,9 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
 
-      - name: Test every supported payload assembly
+      - name: Audit payload assembly
         shell: bash
         run: |
           set -euo pipefail
@@ -30,9 +31,7 @@ jobs:
           from pathlib import Path
 
           files = sorted(Path('.').glob('theater-payload-*.txt'))
-          if not files:
-              raise RuntimeError('No theater-payload files found')
-
+          report = {'files': [], 'strategies': {}}
           alphabet = re.compile(r'[^A-Za-z0-9+/=]')
 
           def normalize(value, remove_all_padding=False):
@@ -49,69 +48,98 @@ jobs:
                   text = text[len('window.THEATER_SCRIPT='):-1]
               data = json.loads(text)
               paragraphs = data.get('paragraphs', [])
-              valid = (
+              if not (
                   data.get('title') == 'Die Räuber'
                   and len(paragraphs) == 1457
                   and len(data.get('acts', [])) == 5
                   and len(data.get('scenes', [])) == 15
                   and paragraphs[0].get('text') == 'FRIEDRICH SCHILLER'
                   and paragraphs[-1].get('text') == 'ENDE'
-              )
-              if not valid:
+              ):
                   raise RuntimeError('Decoded JSON failed theater validation')
               return data
 
           raw_texts = [path.read_text(encoding='utf-8') for path in files]
-          print('FILES')
           for path, text in zip(files, raw_texts):
               cleaned = alphabet.sub('', text)
-              print({
+              report['files'].append({
                   'file': str(path),
-                  'raw_length': len(text),
-                  'clean_length': len(cleaned),
-                  'padding_count': cleaned.count('='),
-                  'starts': cleaned[:12],
-                  'ends': cleaned[-12:]
+                  'rawLength': len(text),
+                  'cleanLength': len(cleaned),
+                  'paddingCount': cleaned.count('='),
+                  'moduloWithoutPadding': len(cleaned.replace('=', '')) % 4,
+                  'starts': cleaned[:16],
+                  'ends': cleaned[-16:]
               })
 
-          strategies = {}
+          results = {}
 
-          # Strategy 1: one Base64 stream, discarding all embedded padding.
-          try:
-              joined = ''.join(raw_texts)
-              decoded = base64.b64decode(normalize(joined, remove_all_padding=True), validate=True)
-              strategies['joined_without_padding'] = parse_payload(decoded)
-              print('SUCCESS joined_without_padding')
-          except Exception as error:
-              print('FAIL joined_without_padding:', type(error).__name__, error)
+          def attempt(name, callback):
+              try:
+                  data = callback()
+                  results[name] = data
+                  report['strategies'][name] = {
+                      'success': True,
+                      'paragraphs': len(data['paragraphs']),
+                      'pages': data.get('pageCount'),
+                      'first': data['paragraphs'][0]['text'],
+                      'last': data['paragraphs'][-1]['text']
+                  }
+              except Exception as error:
+                  report['strategies'][name] = {
+                      'success': False,
+                      'errorType': type(error).__name__,
+                      'error': str(error)
+                  }
 
-          # Strategy 2: each file is independently Base64 encoded; concatenate bytes.
-          try:
-              byte_parts = [
-                  base64.b64decode(normalize(text, remove_all_padding=False), validate=True)
-                  for text in raw_texts
-              ]
-              strategies['decode_each_then_join_bytes'] = parse_payload(b''.join(byte_parts))
-              print('SUCCESS decode_each_then_join_bytes')
-          except Exception as error:
-              print('FAIL decode_each_then_join_bytes:', type(error).__name__, error)
+          attempt('joined_without_padding', lambda: parse_payload(
+              base64.b64decode(normalize(''.join(raw_texts), True), validate=True)
+          ))
 
-          # Strategy 3: extract the longest Base64-looking run from each wrapper file.
-          try:
-              byte_parts = []
+          attempt('decode_each_then_join_bytes', lambda: parse_payload(b''.join(
+              base64.b64decode(normalize(text), validate=True) for text in raw_texts
+          )))
+
+          def longest_runs():
+              parts = []
               for text in raw_texts:
                   runs = re.findall(r'[A-Za-z0-9+/=]{100,}', text)
                   if not runs:
                       raise RuntimeError('No long Base64 run found')
-                  candidate = max(runs, key=len)
-                  byte_parts.append(base64.b64decode(normalize(candidate), validate=True))
-              strategies['longest_run_per_file'] = parse_payload(b''.join(byte_parts))
-              print('SUCCESS longest_run_per_file')
-          except Exception as error:
-              print('FAIL longest_run_per_file:', type(error).__name__, error)
+                  parts.append(base64.b64decode(normalize(max(runs, key=len)), validate=True))
+              return parse_payload(b''.join(parts))
 
-          if not strategies:
-              raise RuntimeError('No payload assembly strategy produced a valid theater script')
+          attempt('longest_run_per_file', longest_runs)
 
-          print('VALIDATED_STRATEGIES', sorted(strategies))
+          Path('/tmp/payload-report.json').write_text(
+              json.dumps(report, ensure_ascii=False, indent=2) + '\n', encoding='utf-8'
+          )
+
+          if results:
+              name = sorted(results)[0]
+              data = results[name]
+              source = (
+                  'window.THEATER_SCRIPT='
+                  + json.dumps(data, ensure_ascii=False, separators=(',', ':'))
+                  + ';\nwindow.loadTheaterScript=async()=>window.THEATER_SCRIPT;\n'
+              )
+              Path('/tmp/theater-data.js').write_text(source, encoding='utf-8')
           PY
+
+      - name: Store report and validated direct data
+        shell: bash
+        run: |
+          set -euo pipefail
+          branch='${{ github.event.pull_request.head.ref }}'
+          if test -z "$branch"; then branch='hotfix/direct-json-v10'; fi
+          git checkout "$branch"
+          mkdir -p .audit
+          cp /tmp/payload-report.json .audit/payload-report.json
+          if test -f /tmp/theater-data.js; then cp /tmp/theater-data.js theater-data.js; fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .audit/payload-report.json
+          if test -f theater-data.js; then git add theater-data.js; fi
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'Record exact online payload audit'
+          git push origin "HEAD:$branch"
