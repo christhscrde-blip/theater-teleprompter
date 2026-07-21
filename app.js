@@ -29,6 +29,7 @@
     lineHeightValue: $('#lineHeightValue'),
     themeButton: $('#themeButton'),
     fullscreenButton: $('#fullscreenButton'),
+    presentationExitButton: $('#presentationExitButton'),
     locationText: $('#locationText'),
     pageText: $('#pageText'),
     progressText: $('#progressText')
@@ -401,6 +402,7 @@
     elements.sidebarBackdrop.addEventListener('click', closeMenu);
     elements.themeButton.addEventListener('click', toggleTheme);
     elements.fullscreenButton.addEventListener('click', toggleFullscreen);
+    elements.presentationExitButton.addEventListener('click', toggleFullscreen);
 
     elements.speedInput.addEventListener('input', () => { updateControlLabels(); saveSettings(); });
     elements.fontInput.addEventListener('input', () => { updateControlLabels(); saveSettings(); updatePosition(); });

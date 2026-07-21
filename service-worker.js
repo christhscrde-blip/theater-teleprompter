@@ -3,6 +3,7 @@ const CORE_ASSETS = [
   './',
   './index.html',
   './styles.css?v=10',
+  './hotfix-v10.css?v=10',
   './app.js?v=10',
   './theater-data.js?v=10',
   './manifest.webmanifest?v=10'
