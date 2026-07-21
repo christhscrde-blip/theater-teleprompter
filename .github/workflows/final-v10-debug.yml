@@ -1,0 +1,219 @@
+name: Final version 10 failure report
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: final-v10-report-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  report:
+    if: github.event.pull_request.head.ref == 'hotfix/direct-json-v10'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+
+      - name: Install Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install --no-save playwright@1.55.0 >/dev/null
+          npx playwright install --with-deps chromium >/dev/null
+
+      - name: Start server
+        run: |
+          python3 -m http.server 4173 --bind 127.0.0.1 >/tmp/server.log 2>&1 &
+          curl --retry 20 --retry-delay 1 --retry-connrefused -fsS http://127.0.0.1:4173/ >/dev/null
+
+      - name: Run instrumented acceptance
+        shell: bash
+        run: |
+          node <<'JS'
+          const fs = require('node:fs');
+          const assert = require('node:assert/strict');
+          const { chromium } = require('playwright');
+          const report = { success: false, step: 'not-started', browserErrors: [] };
+          const URL = 'http://127.0.0.1:4173/?debug=v10';
+
+          async function waitForApp(page) {
+            await page.waitForFunction(() => {
+              const state = window.__TELEPROMPTER__?.getState?.();
+              return state?.version === 10 && state?.paragraphs === 1457 && state?.currentPage === 1;
+            }, null, { timeout: 15000 });
+          }
+
+          async function setRange(page, selector, value) {
+            await page.locator(selector).evaluate((element, next) => {
+              element.value = String(next);
+              element.dispatchEvent(new Event('input', { bubbles: true }));
+            }, value);
+          }
+
+          async function makePage(browser, name, viewport) {
+            const context = await browser.newContext({ viewport, serviceWorkers: 'allow' });
+            await context.addInitScript(() => {
+              try {
+                Object.defineProperty(Document.prototype, 'fullscreenEnabled', { configurable: true, get: () => false });
+              } catch {}
+            });
+            const page = await context.newPage();
+            page.on('pageerror', error => report.browserErrors.push(`${name} pageerror: ${error.message}`));
+            page.on('console', message => { if (message.type() === 'error') report.browserErrors.push(`${name} console: ${message.text()}`); });
+            await page.goto(URL, { waitUntil: 'networkidle' });
+            await waitForApp(page);
+            return { context, page };
+          }
+
+          async function presentation(page) {
+            await page.locator('#fullscreenButton').click();
+            await page.waitForFunction(() => window.__TELEPROMPTER__.getState().presentation === true);
+            await page.locator('#presentationExitButton').waitFor({ state: 'visible' });
+            await page.locator('#presentationExitButton').click();
+            await page.waitForFunction(() => window.__TELEPROMPTER__.getState().presentation === false);
+          }
+
+          (async () => {
+            const browser = await chromium.launch({ headless: true });
+            try {
+              report.step = 'desktop-open';
+              const desktop = await makePage(browser, 'desktop', { width: 1440, height: 900 });
+              const { page, context } = desktop;
+
+              report.step = 'desktop-core';
+              let state = await page.evaluate(() => window.__TELEPROMPTER__.getState());
+              assert.deepEqual([state.version, state.paragraphs, state.pages, state.acts, state.scenes], [10, 1457, 63, 5, 15]);
+              assert.equal(await page.locator('.script-line').count(), 1457);
+
+              report.step = 'desktop-navigation';
+              assert.equal(await page.locator('.nav-link').count(), 5);
+              await page.locator('[data-nav="scenes"]').click();
+              assert.equal(await page.locator('.nav-link').count(), 15);
+              await page.locator('[data-nav="pages"]').click();
+              assert.equal(await page.locator('.nav-link').count(), 64);
+
+              report.step = 'desktop-page-jump';
+              await page.locator('#pageInput').fill('63');
+              await page.locator('#pageJumpButton').click();
+              await page.waitForFunction(() => window.__TELEPROMPTER__.getState().currentPage === 63);
+              await page.locator('#previousPageButton').click();
+              await page.waitForFunction(() => window.__TELEPROMPTER__.getState().currentPage === 62);
+              await page.locator('#nextPageButton').click();
+              await page.waitForFunction(() => window.__TELEPROMPTER__.getState().currentPage === 63);
+
+              report.step = 'desktop-autoscroll';
+              await page.evaluate(() => window.__TELEPROMPTER__.jumpToPage(1));
+              await page.waitForTimeout(100);
+              const before = await page.locator('#stage').evaluate(element => element.scrollTop);
+              await page.locator('#playButton').click();
+              await page.waitForTimeout(900);
+              const after = await page.locator('#stage').evaluate(element => element.scrollTop);
+              assert(after > before + 5, `${before} -> ${after}`);
+              await page.locator('#playButton').click();
+
+              report.step = 'desktop-controls';
+              await setRange(page, '#speedInput', 50);
+              await setRange(page, '#fontInput', 54);
+              await setRange(page, '#lineHeightInput', 1.7);
+              assert.equal(await page.locator('#speedValue').textContent(), '50');
+              assert.equal(await page.locator('#fontValue').textContent(), '54');
+              assert.equal(await page.locator('#lineHeightValue').textContent(), '1.70');
+
+              report.step = 'desktop-theme';
+              await page.locator('#themeButton').click();
+              assert.equal(await page.locator('body').evaluate(element => element.classList.contains('dark')), false);
+              await page.locator('#themeButton').click();
+
+              report.step = 'desktop-presentation';
+              await presentation(page);
+
+              report.step = 'desktop-keyboard';
+              await page.keyboard.press('ArrowRight');
+              await page.waitForFunction(() => window.__TELEPROMPTER__.getState().currentPage === 2);
+              await page.keyboard.press('ArrowLeft');
+              await page.waitForFunction(() => window.__TELEPROMPTER__.getState().currentPage === 1);
+              await page.keyboard.press('Space');
+              await page.waitForFunction(() => window.__TELEPROMPTER__.getState().isPlaying === true);
+              await page.keyboard.press('Space');
+              await page.waitForFunction(() => window.__TELEPROMPTER__.getState().isPlaying === false);
+
+              report.step = 'desktop-settings-reload';
+              await page.reload({ waitUntil: 'networkidle' });
+              await waitForApp(page);
+              assert.equal(await page.locator('#speedValue').textContent(), '50');
+              assert.equal(await page.locator('#fontValue').textContent(), '54');
+
+              report.step = 'desktop-offline';
+              await page.evaluate(() => navigator.serviceWorker.ready);
+              await page.reload({ waitUntil: 'networkidle' });
+              await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
+              await waitForApp(page);
+              await context.setOffline(true);
+              await page.reload({ waitUntil: 'domcontentloaded', timeout: 10000 });
+              await waitForApp(page);
+              await context.setOffline(false);
+              await context.close();
+
+              for (const [name, viewport] of [['iPad', { width: 820, height: 1180 }], ['iPhone', { width: 390, height: 844 }]]) {
+                report.step = `${name}-open`;
+                const device = await makePage(browser, name, viewport);
+                report.step = `${name}-core`;
+                state = await device.page.evaluate(() => window.__TELEPROMPTER__.getState());
+                assert.equal(state.paragraphs, 1457);
+                report.step = `${name}-menu`;
+                await device.page.locator('#menuButton').click();
+                assert(await device.page.locator('body').evaluate(element => element.classList.contains('menu-open')));
+                await device.page.locator('#closeMenuButton').click();
+                report.step = `${name}-presentation`;
+                await presentation(device.page);
+                await device.context.close();
+              }
+
+              report.step = 'browser-errors';
+              assert.deepEqual(report.browserErrors, []);
+              report.success = true;
+              report.step = 'complete';
+            } finally {
+              await browser.close();
+            }
+          })().catch(error => {
+            report.error = error.message;
+            report.stack = error.stack;
+          }).finally(() => {
+            fs.writeFileSync('/tmp/final-v10-debug.json', JSON.stringify(report, null, 2) + '\n');
+          });
+          JS
+
+      - name: Store report
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f /tmp/final-v10-debug.json
+          mkdir -p .audit
+          cp /tmp/final-v10-debug.json .audit/final-v10-debug.json
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .audit/final-v10-debug.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Record final browser failure location'
+            git push origin "HEAD:${{ github.event.pull_request.head.ref }}"
+          fi
+
+      - name: Require success
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          report = json.load(open('/tmp/final-v10-debug.json', encoding='utf-8'))
+          if not report.get('success'):
+              raise SystemExit(1)
+          PY
