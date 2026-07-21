@@ -20,74 +20,56 @@
       <button id="fullscreenButton" class="secondary" type="button">Vollbild</button>
     </div>
   </header>
-
   <main>
     <section id="prompterPanel" class="prompter-panel" aria-label="Theater-Teleprompter">
       <aside id="sidebar" class="sidebar">
         <div class="sidebar-header">
-          <div>
-            <p class="eyebrow">Direkt springen</p>
-            <h2>Navigation</h2>
-          </div>
+          <div><p class="eyebrow">Direkt springen</p><h2>Navigation</h2></div>
           <button id="closeMenuButton" class="ghost close-menu" type="button" aria-label="Navigation schließen">×</button>
         </div>
-
         <div class="nav-tabs" role="tablist" aria-label="Navigationsart">
           <button class="nav-tab active" data-nav="acts" type="button">Akte</button>
           <button class="nav-tab" data-nav="scenes" type="button">Szenen</button>
           <button class="nav-tab" data-nav="pages" type="button">Seiten</button>
         </div>
-
         <nav id="navigationList" class="navigation-list" aria-label="Textnavigation"></nav>
-
         <div class="jump-box">
           <label for="pageInput">Seite direkt öffnen</label>
-          <div>
-            <input id="pageInput" type="number" min="1" inputmode="numeric" aria-label="Seitennummer">
-            <button id="pageJumpButton" type="button">Los</button>
-          </div>
+          <div><input id="pageInput" type="number" min="1" inputmode="numeric" aria-label="Seitennummer"><button id="pageJumpButton" type="button">Los</button></div>
         </div>
       </aside>
-
       <div id="sidebarBackdrop" class="sidebar-backdrop"></div>
-
       <div class="stage-wrap">
         <div class="statusbar">
           <span id="locationText">ERSTER AKT · 1. SZENE</span>
           <span><span id="pageText">Seite 1</span> · <span id="progressText">0 %</span></span>
         </div>
-
         <div id="stage" class="stage" tabindex="0" aria-live="off">
           <div class="reading-guide" aria-hidden="true"></div>
           <article id="scriptDisplay" class="script-display"></article>
         </div>
-
         <div class="controls" aria-label="Teleprompter-Steuerung">
           <button id="previousPageButton" class="secondary control-button" type="button">← Seite</button>
-          <button id="rewindButton" class="secondary control-button" type="button" aria-label="Zurückspringen">−10 s</button>
+          <button id="rewindButton" class="secondary control-button" type="button">−10 s</button>
           <button id="playButton" class="primary control-button" type="button">Start</button>
-          <button id="forwardButton" class="secondary control-button" type="button" aria-label="Vorspringen">+10 s</button>
+          <button id="forwardButton" class="secondary control-button" type="button">+10 s</button>
           <button id="nextPageButton" class="secondary control-button" type="button">Seite →</button>
-
-          <label class="slider-control">
-            <span>Tempo <strong id="speedValue">24</strong></span>
-            <input id="speedInput" type="range" min="4" max="100" value="24">
-          </label>
-
-          <label class="slider-control">
-            <span>Schrift <strong id="fontValue">46</strong></span>
-            <input id="fontInput" type="range" min="28" max="82" value="46">
-          </label>
-
-          <label class="slider-control">
-            <span>Zeilenhöhe <strong id="lineHeightValue">1.55</strong></span>
-            <input id="lineHeightInput" type="range" min="1.25" max="2" step="0.05" value="1.55">
-          </label>
+          <label class="slider-control"><span>Tempo <strong id="speedValue">24</strong></span><input id="speedInput" type="range" min="4" max="100" value="24"></label>
+          <label class="slider-control"><span>Schrift <strong id="fontValue">46</strong></span><input id="fontInput" type="range" min="28" max="82" value="46"></label>
+          <label class="slider-control"><span>Zeilenhöhe <strong id="lineHeightValue">1.55</strong></span><input id="lineHeightInput" type="range" min="1.25" max="2" step="0.05" value="1.55"></label>
         </div>
       </div>
     </section>
   </main>
-
+  <script src="data/chunk-01.js"></script>
+  <script src="data/chunk-02.js"></script>
+  <script src="data/chunk-03.js"></script>
+  <script src="data/chunk-04.js"></script>
+  <script src="data/chunk-05.js"></script>
+  <script src="data/chunk-06.js"></script>
+  <script src="data/chunk-07.js"></script>
+  <script src="data/chunk-08.js"></script>
+  <script src="data/chunk-09.js"></script>
   <script src="script-data.js"></script>
   <script src="app.js" defer></script>
 </body>
