@@ -1,35 +1,37 @@
-# Theater-Teleprompter
+# Die Räuber · Theater-Teleprompter
 
-Browserbasierter Teleprompter für das Bühnenmanuskript **„Die Räuber“**, optimiert für iPad, externe Bildschirme und den Einsatz neben der Bühne.
+Browserbasierter Teleprompter ausschließlich für das formatierte Bühnenmanuskript **„Die Räuber“**. Optimiert für iPad, Smartphone, Notebook und externe Bildschirme.
+
+## Datenbasis
+
+Der vollständige Text ist fest im Repository enthalten. Vier unveränderliche Datenpakete werden beim Öffnen gemeinsam geladen, im Browser entpackt und anschließend streng validiert. Es gibt keinen Dokumentimport, keine frei austauschbaren Stücke und keine externe JavaScript-Bibliothek.
+
+- 1.457 nicht-leere Absätze
+- 5 Akte
+- 15 Szenen
+- 63 gedruckte Textseiten plus Titelblatt
+- Quelle: `Theater.Text.Neu.formatiert.docx`
+- Seitenabgleich: `Theater.Text.Neu.formatiert.pdf`
 
 ## Funktionen
 
-- vollständiger Text aus `Theater.Text.Neu.formatiert.docx`
-- direkte Navigation nach **Akt**, **Szene** und **Seite**
-- Seitensprung über Nummerneingabe sowie Vor-/Zurück-Tasten
-- automatische Scrollfunktion mit einstellbarem Tempo
+- Navigation nach Akt, Szene und gedruckter Seite
+- direkter Seitensprung sowie Vor-/Zurück-Tasten
+- automatisches Scrollen mit einstellbarem Tempo
 - einstellbare Schriftgröße und Zeilenhöhe
-- deutliche Darstellung von Akt, Szene, Szenenbild, Sprecher und Replik
-- Leseführung im Bildschirmzentrum
-- Nachtmodus, Vollbildmodus und Offline-Cache
-- responsives Menü für iPad und Smartphone
+- semantische Darstellung von Akt, Szene, Szenenbild, Sprecher, Replik und Regieanweisung
+- Leselinie, Nachtmodus und Präsentationsmodus
+- responsive Navigation für iPad und Smartphone
+- Offline-Nutzung über einen Service Worker
 
-## Bedienung
+## Tastatur
 
-- `Leertaste`: Start oder Pause
-- `Pfeil links/rechts`: vorherige oder nächste Seite
-- `Pfeil hoch/runter`: Scrolltempo ändern
-- `F`: Vollbild
-- `M`: Navigation öffnen oder schließen
+- `Leertaste`: Start/Pause
+- `Pfeil links/rechts`: vorherige/nächste Seite
+- `Pfeil hoch/runter`: Tempo ändern
+- `F`: Vollbild beziehungsweise Präsentationsmodus
+- `M`: Navigation öffnen/schließen
 
 ## GitHub Pages
 
-Der Workflow `.github/workflows/pages.yml` veröffentlicht den Inhalt des Repositorys automatisch über GitHub Pages. In den Repository-Einstellungen muss unter **Pages → Build and deployment → Source** einmalig **GitHub Actions** ausgewählt werden.
-
-Die öffentliche Adresse lautet anschließend voraussichtlich:
-
-`https://christhscrde-blip.github.io/theater-teleprompter/`
-
-## Textdaten
-
-Die komprimierten Dateien unter `data/` enthalten 1.457 nicht-leere Absätze, 5 Akte, 15 Szenen und die beim PDF-Rendering ermittelte Aufteilung auf 64 Seiten. Die Word-Formatvorlagen wurden als semantische Typen übernommen.
+Die Seite besteht ausschließlich aus statischen Dateien und kann direkt aus dem Branch `main` über GitHub Pages veröffentlicht werden. Ein eigener Build- oder Deployment-Workflow ist nicht erforderlich.

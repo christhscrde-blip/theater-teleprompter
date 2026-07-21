@@ -1,8 +1,9 @@
 {
-  "name": "Theater Teleprompter",
-  "short_name": "Teleprompter",
-  "description": "Ein Teleprompter für Theaterproben und Aufführungen.",
+  "name": "Die Räuber · Theater-Teleprompter",
+  "short_name": "Die Räuber",
+  "description": "Teleprompter für das Bühnenmanuskript Die Räuber.",
   "start_url": "./",
+  "scope": "./",
   "display": "standalone",
   "background_color": "#09090b",
   "theme_color": "#09090b",

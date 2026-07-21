@@ -1,53 +1,38 @@
-const CACHE_NAME = 'theater-teleprompter-v7';
-const ASSETS = [
+const CACHE_NAME = 'theater-teleprompter-v8';
+const CORE_ASSETS = [
   './',
   './index.html',
-  './styles.css?v=7',
-  './app.js?v=7',
-  './script-data.js?v=7',
-  './manifest.webmanifest?v=7',
-  './data/chunk-01.js?v=7',
-  './data/chunk-02.js?v=7',
-  './data/chunk-03.js?v=7',
-  './data/chunk-04.js?v=7',
-  './data/chunk-05.js?v=7',
-  './data/chunk-06.js?v=7',
-  './data/chunk-07.js?v=7',
-  './data/chunk-08.js?v=7',
-  './data/chunk-09.js?v=7'
+  './styles.css?v=8',
+  './app.js?v=8',
+  './theater-loader.js?v=8',
+  './theater-payload-01.txt?v=8',
+  './theater-payload-02.txt?v=8',
+  './theater-payload-03.txt?v=8',
+  './theater-payload-04.txt?v=8',
+  './manifest.webmanifest?v=8'
 ];
 
 self.addEventListener('install', event => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then(async cache => {
-      for (const asset of ASSETS) {
-        const response = await fetch(asset, { cache: 'reload' });
-        if (!response.ok) throw new Error(`Asset nicht verfügbar: ${asset}`);
-        await cache.put(asset, response);
-      }
-    })
-  );
+  event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(CORE_ASSETS)));
   self.skipWaiting();
 });
 
 self.addEventListener('activate', event => {
   event.waitUntil(
-    caches.keys().then(keys => Promise.all(
-      keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key))
-    ))
+    caches.keys().then(keys => Promise.all(keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key))))
   );
   self.clients.claim();
 });
 
 self.addEventListener('fetch', event => {
-  if (event.request.method !== 'GET') return;
+  const request = event.request;
+  if (request.method !== 'GET' || new URL(request.url).origin !== self.location.origin) return;
 
-  if (event.request.mode === 'navigate') {
+  if (request.mode === 'navigate') {
     event.respondWith(
-      fetch(event.request)
+      fetch(request)
         .then(response => {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put('./index.html', clone));
+          if (response.ok) caches.open(CACHE_NAME).then(cache => cache.put('./index.html', response.clone()));
           return response;
         })
         .catch(() => caches.match('./index.html'))
@@ -56,12 +41,12 @@ self.addEventListener('fetch', event => {
   }
 
   event.respondWith(
-    caches.match(event.request).then(cached => cached || fetch(event.request).then(response => {
-      if (response.ok) {
-        const clone = response.clone();
-        caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
-      }
-      return response;
-    }))
+    caches.match(request).then(cached => {
+      if (cached) return cached;
+      return fetch(request).then(response => {
+        if (response.ok) caches.open(CACHE_NAME).then(cache => cache.put(request, response.clone()));
+        return response;
+      });
+    })
   );
 });
