@@ -110,6 +110,8 @@ async function testDesktop(browser) {
   await page.locator('#themeButton').click();
   await assertPresentation(page, 'desktop');
 
+  await page.evaluate(() => window.__TELEPROMPTER__.jumpToPage(1));
+  await page.waitForFunction(() => window.__TELEPROMPTER__.getState().currentPage === 1);
   await page.keyboard.press('ArrowRight');
   await page.waitForFunction(() => window.__TELEPROMPTER__.getState().currentPage === 2);
   await page.keyboard.press('ArrowLeft');
