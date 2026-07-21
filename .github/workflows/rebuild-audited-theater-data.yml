@@ -23,40 +23,90 @@ jobs:
           ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
           fetch-depth: 0
 
-      - name: Verify every transport block
+      - name: Audit blocks and build when exact
         shell: bash
         run: |
-          set -euo pipefail
-          mapfile -t blocks < <(find .payload-v10 -maxdepth 1 -type f -name 'block-*.b64' | sort)
-          test "${#blocks[@]}" -eq 16
-
-          for index in $(seq -w 1 15); do
-            test "$(wc -c < ".payload-v10/block-${index}.b64")" -eq 4096
-          done
-          test "$(wc -c < .payload-v10/block-16.b64)" -eq 1896
-
-          cat "${blocks[@]}" > /tmp/theater-data.b64
-          test "$(wc -c < /tmp/theater-data.b64)" -eq 63336
-          echo '43fe8f342fd0ada6cc581742e2d96650959be3803cefc428d55c5a6ccfefa0e5  /tmp/theater-data.b64' | sha256sum -c -
-
-      - name: Decode and validate the complete script
-        shell: bash
-        run: |
-          set -euo pipefail
-          base64 --decode /tmp/theater-data.b64 > /tmp/theater-data.json.gz
-          echo 'fe2cf6547329797bdafa21aa5beaef32752e4d2f411f358e39ee00a828689703  /tmp/theater-data.json.gz' | sha256sum -c -
-          gzip -dc /tmp/theater-data.json.gz > /tmp/theater-data.json
-          echo '87c35d3b503758c201e23cbc59acf34d003b47106405db016df03e414ab916e5  /tmp/theater-data.json' | sha256sum -c -
-
+          set -u
           python3 - <<'PY'
+          import base64
+          import gzip
           import hashlib
           import json
           from pathlib import Path
 
-          raw = Path('/tmp/theater-data.json').read_bytes()
-          data = json.loads(raw)
-          paragraphs = data.get('paragraphs', [])
+          expected = {
+              'block-01.b64': (4096, 'ed2aa773d415cc3d24f8c1b000427379a9bb334266cb6fca758177fb30f3122a'),
+              'block-02.b64': (4096, '842619b60ff23ed9aafb4f2c6fe61666b58e047f21f1662ad98e9fa5eb46f7db'),
+              'block-03.b64': (4096, '80cd4caeacc6dc3609eb7c81b32c82517cff835f9d5c3d694d3a037e859272a8'),
+              'block-04.b64': (4096, '32235da9832442537d7c69585a059aa551af5e37bb4613ba3d33a95f5d9ebf5e'),
+              'block-05.b64': (4096, 'e29e4d5ad4122ab072d634c403a7e7f23bc11af9660240809816608a8b359f9d'),
+              'block-06.b64': (4096, '7e76f670080dae50bf3c23f988c18f1610e8acfae52a90357db65eefc96b0e80'),
+              'block-07.b64': (4096, '0a3f2153cf51ad51407d0511d9dabb3c5b14c2c806028bb47269645fb85a0d3e'),
+              'block-08.b64': (4096, '1147f2a95fddad70c59095ed399362e1385fd092a34296ce3df702b8d31534d0'),
+              'block-09.b64': (4096, 'ebe9a94de6b7ff5768ae81df7c6d9b8d54fc940dc604f6109a47f1b5599d8909'),
+              'block-10.b64': (4096, '66ad40820c653e51f8e912ea7e3cc621459abb0f33e32fc5e8fefd1ae4716cab'),
+              'block-11.b64': (4096, '9a1b7a106a8b1fc6379df177cc4a92dec054ba98827bcb7348f7f705a983dc00'),
+              'block-12.b64': (4096, '41c0f99b8bfc300572545f400549f9b5eb68104f45bd27b7e9a7673bd716f1e2'),
+              'block-13.b64': (4096, '19fb7025eba168bf32ce255baf2e2512398cd3bef126c0753b0f88a04e875eec'),
+              'block-14.b64': (4096, 'fa7a656621019eb39cbb3a3f151d39c55a3787da8a7a21efdc7189499b18b747'),
+              'block-15.b64': (4096, '0b6b9d1af85e6cd690efca9ca5951932bbb3ee2e668cad8763cdc5ffa29d4522'),
+              'block-16.b64': (1896, '47e4e6ede860d46249abef2bef01aab6697d47e77b7ba9c243c00010e11c9402'),
+          }
 
+          report = {'blocks': [], 'allBlocksExact': True, 'build': None}
+          payload_parts = []
+          for name, (expected_size, expected_sha) in expected.items():
+              path = Path('.payload-v10') / name
+              if path.exists():
+                  raw = path.read_bytes()
+                  actual_size = len(raw)
+                  actual_sha = hashlib.sha256(raw).hexdigest()
+                  exact = actual_size == expected_size and actual_sha == expected_sha
+                  payload_parts.append(raw)
+              else:
+                  actual_size = None
+                  actual_sha = None
+                  exact = False
+              report['blocks'].append({
+                  'name': name,
+                  'expectedSize': expected_size,
+                  'actualSize': actual_size,
+                  'expectedSha256': expected_sha,
+                  'actualSha256': actual_sha,
+                  'exact': exact,
+              })
+              report['allBlocksExact'] = report['allBlocksExact'] and exact
+
+          Path('/tmp/transport-report.json').write_text(
+              json.dumps(report, ensure_ascii=False, indent=2) + '\n', encoding='utf-8'
+          )
+
+          if not report['allBlocksExact']:
+              raise SystemExit(0)
+
+          encoded = b''.join(payload_parts)
+          encoded_sha = hashlib.sha256(encoded).hexdigest()
+          if len(encoded) != 63336 or encoded_sha != '43fe8f342fd0ada6cc581742e2d96650959be3803cefc428d55c5a6ccfefa0e5':
+              report['build'] = {'error': 'combined Base64 hash mismatch', 'size': len(encoded), 'sha256': encoded_sha}
+              Path('/tmp/transport-report.json').write_text(json.dumps(report, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+              raise SystemExit(0)
+
+          compressed = base64.b64decode(encoded, validate=True)
+          gzip_sha = hashlib.sha256(compressed).hexdigest()
+          if gzip_sha != 'fe2cf6547329797bdafa21aa5beaef32752e4d2f411f358e39ee00a828689703':
+              report['build'] = {'error': 'gzip hash mismatch', 'sha256': gzip_sha}
+              Path('/tmp/transport-report.json').write_text(json.dumps(report, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+              raise SystemExit(0)
+
+          raw_json = gzip.decompress(compressed)
+          json_sha = hashlib.sha256(raw_json).hexdigest()
+          if json_sha != '87c35d3b503758c201e23cbc59acf34d003b47106405db016df03e414ab916e5':
+              report['build'] = {'error': 'JSON hash mismatch', 'sha256': json_sha}
+              Path('/tmp/transport-report.json').write_text(json.dumps(report, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+              raise SystemExit(0)
+
+          data = json.loads(raw_json)
+          paragraphs = data.get('paragraphs', [])
           checks = {
               'title': data.get('title') == 'Die Räuber',
               'paragraphs': len(paragraphs) == 1457,
@@ -71,7 +121,9 @@ jobs:
           }
           failed = [name for name, passed in checks.items() if not passed]
           if failed:
-              raise RuntimeError('Validation failed: ' + ', '.join(failed))
+              report['build'] = {'error': 'semantic validation failed', 'failed': failed}
+              Path('/tmp/transport-report.json').write_text(json.dumps(report, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+              raise SystemExit(0)
 
           source = (
               'window.THEATER_SCRIPT='
@@ -79,11 +131,11 @@ jobs:
               + ';\nwindow.loadTheaterScript=async()=>window.THEATER_SCRIPT;\n'
           )
           Path('/tmp/theater-data.js').write_text(source, encoding='utf-8')
-
-          report = {
-              'sourceBase64Sha256': '43fe8f342fd0ada6cc581742e2d96650959be3803cefc428d55c5a6ccfefa0e5',
-              'gzipSha256': 'fe2cf6547329797bdafa21aa5beaef32752e4d2f411f358e39ee00a828689703',
-              'jsonSha256': hashlib.sha256(raw).hexdigest(),
+          report['build'] = {
+              'success': True,
+              'base64Sha256': encoded_sha,
+              'gzipSha256': gzip_sha,
+              'jsonSha256': json_sha,
               'paragraphs': len(paragraphs),
               'pages': data['pageCount'],
               'physicalPages': data['physicalPageCount'],
@@ -92,29 +144,32 @@ jobs:
               'first': paragraphs[0]['text'],
               'last': paragraphs[-1]['text'],
           }
-          Path('/tmp/direct-data-report.json').write_text(
-              json.dumps(report, ensure_ascii=False, indent=2) + '\n',
-              encoding='utf-8',
+          Path('/tmp/transport-report.json').write_text(
+              json.dumps(report, ensure_ascii=False, indent=2) + '\n', encoding='utf-8'
           )
           PY
-          node --check /tmp/theater-data.js
 
-      - name: Commit only the validated direct file
+      - name: Store audit and validated direct file
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p .audit
-          cp /tmp/theater-data.js theater-data.js
-          cp /tmp/direct-data-report.json .audit/direct-data-report.json
+          cp /tmp/transport-report.json .audit/transport-report.json
+          if test -f /tmp/theater-data.js; then cp /tmp/theater-data.js theater-data.js; fi
           rm -f .payload-v10/chunk-*.b64
           rm -f .audit/payload-report.json .audit/prefix-recovery-report.json
 
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add theater-data.js .audit/direct-data-report.json .payload-v10 .audit
-          if git diff --cached --quiet; then
-            echo 'Validated direct data is already current.'
-            exit 0
+          git add .audit .payload-v10
+          if test -f theater-data.js; then git add theater-data.js; fi
+          if ! git diff --cached --quiet; then
+            git commit -m 'Record transport audit and validated direct data'
+            git push origin "HEAD:${{ github.event.pull_request.head.ref || github.ref_name }}"
           fi
-          git commit -m 'Generate hash-verified direct Die Räuber data'
-          git push origin "HEAD:${{ github.event.pull_request.head.ref || github.ref_name }}"
+
+      - name: Require a validated direct file
+        shell: bash
+        run: |
+          test -f /tmp/theater-data.js
+          node --check /tmp/theater-data.js
