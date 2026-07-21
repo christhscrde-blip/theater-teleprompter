@@ -1,0 +1,77 @@
+name: Live GitHub Pages acceptance
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - index.html
+      - app.js
+      - styles.css
+      - hotfix-v10.css
+      - theater-data.js
+      - service-worker.js
+      - manifest.webmanifest
+      - tests/v10-acceptance.cjs
+      - .github/workflows/live-pages-smoke.yml
+  workflow_dispatch:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: live-pages-acceptance
+  cancel-in-progress: true
+
+jobs:
+  live-acceptance:
+    if: github.event_name != 'issues' || github.event.issue.title == '[internal] Run live Pages acceptance v10'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Wait for version 10 deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          url='https://christhscrde-blip.github.io/theater-teleprompter/?v=10'
+          for attempt in $(seq 1 60); do
+            body="$(curl -fsSL --max-time 15 "$url" || true)"
+            if printf '%s' "$body" | grep -q 'theater-data.js?v=10' \
+              && printf '%s' "$body" | grep -q 'presentationExitButton' \
+              && ! printf '%s' "$body" | grep -q 'theater-loader.js'; then
+              echo 'Version 10 HTML is live.'
+              exit 0
+            fi
+            echo "Waiting for deployment ($attempt/60)…"
+            sleep 10
+          done
+          echo 'Version 10 did not appear on GitHub Pages in time.' >&2
+          exit 1
+
+      - name: Verify live assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          base='https://christhscrde-blip.github.io/theater-teleprompter'
+          for asset in 'theater-data.js?v=10' 'app.js?v=10' 'styles.css?v=10' 'hotfix-v10.css?v=10' 'service-worker.js?v=10' 'manifest.webmanifest?v=10'; do
+            curl -fsSL --max-time 30 "$base/$asset" >/dev/null
+          done
+          curl -fsSL --max-time 30 "$base/theater-data.js?v=10" | grep -q '"paragraphCount":1457'
+          curl -fsSL --max-time 30 "$base/theater-data.js?v=10" | grep -q '"text":"ENDE"'
+
+      - name: Install Chromium
+        shell: bash
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install --no-save playwright@1.55.0 >/dev/null
+          npx playwright install --with-deps chromium >/dev/null
+
+      - name: Run full acceptance against the live site
+        env:
+          TEST_URL: https://christhscrde-blip.github.io/theater-teleprompter/?acceptance=v10
+        run: node tests/v10-acceptance.cjs
