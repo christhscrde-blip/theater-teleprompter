@@ -1,4 +1,4 @@
-const CACHE_NAME = 'theater-teleprompter-v2';
+const CACHE_NAME = 'theater-teleprompter-v3';
 const ASSETS = [
   './', './index.html', './styles.css', './app.js', './script-data.js', './manifest.webmanifest',
   './data/chunk-01.js', './data/chunk-02.js', './data/chunk-03.js',
@@ -18,7 +18,7 @@ self.addEventListener('activate', event => {
 self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return;
   event.respondWith(caches.match(event.request).then(cached => cached || fetch(event.request).then(response => {
-    if (response.ok) {
+    if (response.ok || response.type === 'opaque') {
       const clone = response.clone();
       caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
     }
