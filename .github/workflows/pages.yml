@@ -23,12 +23,71 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Build direct Die Räuber data
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import base64
+          import gzip
+          import json
+          import re
+          import shutil
+          from pathlib import Path
+
+          root = Path('.')
+          site = root / '_site'
+          site.mkdir(exist_ok=True)
+
+          for filename in (
+              'index.html',
+              'styles.css',
+              'app.js',
+              'manifest.webmanifest',
+              'service-worker.js',
+          ):
+              shutil.copy2(root / filename, site / filename)
+
+          chunks = []
+          chunk_files = sorted((root / 'data').glob('chunk-*.js'))
+          if len(chunk_files) != 9:
+              raise RuntimeError(f'Erwartet wurden 9 Textpakete, gefunden wurden {len(chunk_files)}.')
+
+          pattern = re.compile(r'push\(("(?:\\.|[^"\\])*")\)', re.DOTALL)
+          for path in chunk_files:
+              match = pattern.search(path.read_text(encoding='utf-8'))
+              if not match:
+                  raise RuntimeError(f'Kein Datenpaket in {path} gefunden.')
+              chunks.append(json.loads(match.group(1)))
+
+          compressed = base64.b64decode(''.join(chunks), validate=True)
+          source_text = gzip.decompress(compressed).decode('utf-8')
+          data = json.loads(source_text)
+
+          paragraphs = data.get('paragraphs')
+          if data.get('title') != 'Die Räuber' or not isinstance(paragraphs, list) or len(paragraphs) < 1000:
+              raise RuntimeError('Die entpackten Daten sind nicht der vollständige Text von „Die Räuber“.')
+
+          direct_script = (
+              'window.THEATER_SCRIPT='
+              + json.dumps(data, ensure_ascii=False, separators=(',', ':'))
+              + ';\nwindow.loadTheaterScript=async()=>window.THEATER_SCRIPT;\n'
+          )
+          (site / 'script-direct.js').write_text(direct_script, encoding='utf-8')
+          (site / '.nojekyll').write_text('', encoding='utf-8')
+
+          print(f'{len(paragraphs)} Absätze direkt in script-direct.js geschrieben.')
+          print(f'Dateigröße: {(site / "script-direct.js").stat().st_size} Byte')
+          PY
+
       - name: Configure Pages
         uses: actions/configure-pages@v5
+
       - name: Upload static site
         uses: actions/upload-pages-artifact@v3
         with:
-          path: .
+          path: _site
+
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v4
