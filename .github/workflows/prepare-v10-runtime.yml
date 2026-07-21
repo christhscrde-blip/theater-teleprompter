@@ -48,6 +48,17 @@ jobs:
           source, count = re.subn(r'const VERSION = \d+;', 'const VERSION = 10;', source, count=1)
           if count != 1:
               raise RuntimeError('Could not update app VERSION')
+
+          state_marker = "getState: () => ({\n        title:"
+          if state_marker in source:
+              source = source.replace(
+                  state_marker,
+                  "getState: () => ({\n        version: VERSION,\n        title:",
+                  1,
+              )
+          elif "getState: () => ({\n        version: VERSION," not in source:
+              raise RuntimeError('Could not expose VERSION in getState')
+
           path.write_text(source, encoding='utf-8')
           PY
 
