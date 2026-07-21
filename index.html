@@ -5,15 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#09090b">
   <title>Die Räuber · Theater-Teleprompter</title>
-  <link rel="manifest" href="manifest.webmanifest?v=5">
-  <link rel="stylesheet" href="styles.css?v=5">
+  <link rel="manifest" href="manifest.webmanifest?v=6">
+  <link rel="stylesheet" href="styles.css?v=6">
 </head>
 <body class="dark">
   <header class="topbar">
-    <div>
-      <p class="eyebrow">Taugliches Amateur Theater</p>
-      <h1>Die Räuber · Teleprompter</h1>
-    </div>
+    <div><p class="eyebrow">Taugliches Amateur Theater</p><h1>Die Räuber · Teleprompter</h1></div>
     <div class="top-actions">
       <button id="menuButton" class="secondary mobile-menu" type="button">Navigation</button>
       <button id="themeButton" class="secondary" type="button">Heller Modus</button>
@@ -23,31 +20,19 @@
   <main>
     <section id="prompterPanel" class="prompter-panel" aria-label="Theater-Teleprompter">
       <aside id="sidebar" class="sidebar">
-        <div class="sidebar-header">
-          <div><p class="eyebrow">Direkt springen</p><h2>Navigation</h2></div>
-          <button id="closeMenuButton" class="ghost close-menu" type="button" aria-label="Navigation schließen">×</button>
-        </div>
+        <div class="sidebar-header"><div><p class="eyebrow">Direkt springen</p><h2>Navigation</h2></div><button id="closeMenuButton" class="ghost close-menu" type="button" aria-label="Navigation schließen">×</button></div>
         <div class="nav-tabs" role="tablist" aria-label="Navigationsart">
           <button class="nav-tab active" data-nav="acts" type="button">Akte</button>
           <button class="nav-tab" data-nav="scenes" type="button">Szenen</button>
           <button class="nav-tab" data-nav="pages" type="button">Seiten</button>
         </div>
         <nav id="navigationList" class="navigation-list" aria-label="Textnavigation"></nav>
-        <div class="jump-box">
-          <label for="pageInput">Seite direkt öffnen</label>
-          <div><input id="pageInput" type="number" min="1" inputmode="numeric" aria-label="Seitennummer"><button id="pageJumpButton" type="button">Los</button></div>
-        </div>
+        <div class="jump-box"><label for="pageInput">Seite direkt öffnen</label><div><input id="pageInput" type="number" min="1" inputmode="numeric" aria-label="Seitennummer"><button id="pageJumpButton" type="button">Los</button></div></div>
       </aside>
       <div id="sidebarBackdrop" class="sidebar-backdrop"></div>
       <div class="stage-wrap">
-        <div class="statusbar">
-          <span id="locationText">ERSTER AKT · 1. SZENE</span>
-          <span><span id="pageText">Seite 1</span> · <span id="progressText">0 %</span></span>
-        </div>
-        <div id="stage" class="stage" tabindex="0" aria-live="off">
-          <div class="reading-guide" aria-hidden="true"></div>
-          <article id="scriptDisplay" class="script-display"><p class="loading-text">„Die Räuber“ wird geladen …</p></article>
-        </div>
+        <div class="statusbar"><span id="locationText">ERSTER AKT · 1. SZENE</span><span><span id="pageText">Seite 1</span> · <span id="progressText">0 %</span></span></div>
+        <div id="stage" class="stage" tabindex="0" aria-live="off"><div class="reading-guide" aria-hidden="true"></div><article id="scriptDisplay" class="script-display"><p class="loading-text">„Die Räuber“ wird geladen …</p></article></div>
         <div class="controls" aria-label="Teleprompter-Steuerung">
           <button id="previousPageButton" class="secondary control-button" type="button">← Seite</button>
           <button id="rewindButton" class="secondary control-button" type="button">−10 s</button>
@@ -61,7 +46,18 @@
       </div>
     </section>
   </main>
-  <script src="script-direct.js?v=5"></script>
-  <script src="app.js?v=5" defer></script>
+  <script src="script-direct.js?v=6"></script>
+  <script src="https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js"></script>
+  <script src="data/chunk-01.js?v=6"></script>
+  <script src="data/chunk-02.js?v=6"></script>
+  <script src="data/chunk-03.js?v=6"></script>
+  <script src="data/chunk-04.js?v=6"></script>
+  <script src="data/chunk-05.js?v=6"></script>
+  <script src="data/chunk-06.js?v=6"></script>
+  <script src="data/chunk-07.js?v=6"></script>
+  <script src="data/chunk-08.js?v=6"></script>
+  <script src="data/chunk-09.js?v=6"></script>
+  <script src="script-data.js?v=6"></script>
+  <script src="app.js?v=6" defer></script>
 </body>
 </html>
