@@ -1,15 +1,15 @@
-const CACHE_NAME = 'theater-teleprompter-v8';
+const CACHE_NAME = 'theater-teleprompter-v9';
 const CORE_ASSETS = [
   './',
   './index.html',
-  './styles.css?v=8',
-  './app.js?v=8',
-  './theater-loader.js?v=8',
-  './theater-payload-01.txt?v=8',
-  './theater-payload-02.txt?v=8',
-  './theater-payload-03.txt?v=8',
-  './theater-payload-04.txt?v=8',
-  './manifest.webmanifest?v=8'
+  './styles.css?v=9',
+  './app.js?v=9',
+  './theater-loader.js?v=9',
+  './theater-payload-01.txt?v=9',
+  './theater-payload-02.txt?v=9',
+  './theater-payload-03.txt?v=9',
+  './theater-payload-04.txt?v=9',
+  './manifest.webmanifest?v=9'
 ];
 
 self.addEventListener('install', event => {
@@ -30,7 +30,7 @@ self.addEventListener('fetch', event => {
 
   if (request.mode === 'navigate') {
     event.respondWith(
-      fetch(request)
+      fetch(request, { cache: 'no-store' })
         .then(response => {
           if (response.ok) caches.open(CACHE_NAME).then(cache => cache.put('./index.html', response.clone()));
           return response;
