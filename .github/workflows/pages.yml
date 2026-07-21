@@ -1,21 +1,21 @@
-name: Build and deploy Die Räuber
+name: Generate Die Räuber Script
 
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - script-direct.js
   workflow_dispatch:
 
 permissions:
   contents: write
-  pages: write
-  id-token: write
 
 concurrency:
-  group: pages
+  group: generate-theater-script
   cancel-in-progress: true
 
 jobs:
-  build:
+  generate:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -23,7 +23,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Build direct Die Räuber data
+      - name: Generate direct browser data
         shell: bash
         run: |
           python3 - <<'PY'
@@ -49,39 +49,28 @@ jobs:
           compressed = base64.b64decode(''.join(chunks), validate=True)
           data = json.loads(gzip.decompress(compressed).decode('utf-8'))
           paragraphs = data.get('paragraphs')
-          if data.get('title') != 'Die Räuber' or not isinstance(paragraphs, list) or len(paragraphs) < 1000:
-              raise RuntimeError('Die Daten sind nicht der vollständige Text von „Die Räuber“.')
 
-          direct_script = (
+          if data.get('title') != 'Die Räuber' or not isinstance(paragraphs, list) or len(paragraphs) < 1000:
+              raise RuntimeError('Die Daten enthalten nicht den vollständigen Text von „Die Räuber“.')
+
+          output = (
               'window.THEATER_SCRIPT='
               + json.dumps(data, ensure_ascii=False, separators=(',', ':'))
               + ';\nwindow.loadTheaterScript=async()=>window.THEATER_SCRIPT;\n'
           )
-          Path('script-direct.js').write_text(direct_script, encoding='utf-8')
-          print(f'{len(paragraphs)} Absätze direkt in script-direct.js geschrieben.')
+          Path('script-direct.js').write_text(output, encoding='utf-8')
+          print(f'{len(paragraphs)} Absätze geschrieben.')
           PY
 
-      - name: Commit generated direct text
+      - name: Commit generated script
         shell: bash
         run: |
           if git diff --quiet -- script-direct.js && git ls-files --error-unmatch script-direct.js >/dev/null 2>&1; then
             echo "script-direct.js ist bereits aktuell."
-          else
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add script-direct.js
-            git commit -m "Generate direct Die Räuber text"
-            git push
+            exit 0
           fi
-
-      - name: Configure Pages
-        uses: actions/configure-pages@v5
-
-      - name: Upload static site
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: .
-
-      - name: Deploy
-        id: deployment
-        uses: actions/deploy-pages@v4
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add script-direct.js
+          git commit -m "Generate direct Die Räuber script"
+          git push
