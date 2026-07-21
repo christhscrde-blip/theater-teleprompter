@@ -1,0 +1,100 @@
+name: Rebuild audited Die Räuber data
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: rebuild-audited-theater-data
+  cancel-in-progress: true
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout preserved source branch
+        uses: actions/checkout@v4
+        with:
+          ref: backup/pre-browser-audit-2026-07-21
+          fetch-depth: 0
+
+      - name: Reconstruct and validate direct browser data
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64
+          import gzip
+          import json
+          import re
+          from pathlib import Path
+
+          files = sorted(Path('data').glob('chunk-*.js'))
+          if len(files) != 9:
+              raise RuntimeError(f'Expected 9 preserved chunks, found {len(files)}')
+
+          pattern = re.compile(r'push\(("(?:\\.|[^"\\])*")\)', re.DOTALL)
+          chunks = []
+          for path in files:
+              match = pattern.search(path.read_text(encoding='utf-8'))
+              if not match:
+                  raise RuntimeError(f'No payload found in {path}')
+              chunks.append(json.loads(match.group(1)))
+
+          joined = ''.join(chunks)
+          cleaned = re.sub(r'[^A-Za-z0-9+/=]', '', joined)
+          cleaned = cleaned.rstrip('=')
+          cleaned += '=' * ((4 - len(cleaned) % 4) % 4)
+          raw = gzip.decompress(base64.b64decode(cleaned, validate=True)).decode('utf-8')
+          data = json.loads(raw)
+
+          paragraphs = data.get('paragraphs')
+          if data.get('title') != 'Die Räuber' or not isinstance(paragraphs, list) or len(paragraphs) != 1457:
+              raise RuntimeError('Preserved data validation failed')
+          if paragraphs[0].get('text') != 'FRIEDRICH SCHILLER' or paragraphs[-1].get('text') != 'ENDE':
+              raise RuntimeError('Beginning or ending is missing')
+          if len(data.get('acts', [])) != 5 or len(data.get('scenes', [])) != 15:
+              raise RuntimeError('Act or scene structure is incomplete')
+
+          # The preserved data numbers the title sheet as page 1. The UI uses
+          # printed page numbers, so the title becomes page 0 and text pages 1-63.
+          for paragraph in paragraphs:
+              paragraph['page'] = max(0, int(paragraph.get('page', 1)) - 1)
+          for key in ('acts', 'scenes', 'pages'):
+              for entry in data.get(key, []):
+                  if 'page' in entry:
+                      entry['page'] = max(0, int(entry['page']) - 1)
+          data['pageCount'] = 63
+          data['physicalPageCount'] = 64
+          data['paragraphCount'] = len(paragraphs)
+
+          source = (
+              'window.THEATER_SCRIPT='
+              + json.dumps(data, ensure_ascii=False, separators=(',', ':'))
+              + ';\nwindow.loadTheaterScript=async()=>window.THEATER_SCRIPT;\n'
+          )
+          Path('/tmp/theater-data.js').write_text(source, encoding='utf-8')
+          print(f'Validated {len(paragraphs)} paragraphs, {len(data["acts"])} acts, {len(data["scenes"])} scenes')
+          PY
+          node --check /tmp/theater-data.js
+
+      - name: Commit only to isolated repair branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin repair/direct-data-v8
+          git checkout repair/direct-data-v8
+          cp /tmp/theater-data.js theater-data.js
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add theater-data.js
+          if git diff --cached --quiet; then
+            echo 'Direct data is already current.'
+            exit 0
+          fi
+          git commit -m 'Generate validated direct Die Räuber data'
+          git push origin HEAD:repair/direct-data-v8
