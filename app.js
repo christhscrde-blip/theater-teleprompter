@@ -458,6 +458,7 @@
     window.__TELEPROMPTER__ = {
       version: VERSION,
       getState: () => ({
+        version: VERSION,
         title: script.title,
         paragraphs: script.paragraphs.length,
         pages: script.pageCount,
