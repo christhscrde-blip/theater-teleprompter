@@ -1,18 +1,17 @@
 name: Isolated verified theater data repair
 
-# This temporary workflow writes only to the isolated repair branch.
+# Temporary, isolated builder. It writes only to repair/direct-data-v8.
 on:
-  push:
-    branches: [main]
-    paths:
-      - .github/workflows/repair-data-builder.yml
   workflow_dispatch:
+  issues:
+    types: [opened]
 
 permissions:
   contents: write
 
 jobs:
   build-repair-data:
+    if: github.event_name == 'workflow_dispatch' || github.event.issue.title == '[internal] Build audited theater data v8'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repair branch
