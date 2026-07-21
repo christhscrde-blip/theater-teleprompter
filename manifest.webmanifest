@@ -1,0 +1,11 @@
+{
+  "name": "Theater Teleprompter",
+  "short_name": "Teleprompter",
+  "description": "Ein Teleprompter für Theaterproben und Aufführungen.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#09090b",
+  "theme_color": "#09090b",
+  "lang": "de-DE",
+  "orientation": "any"
+}
