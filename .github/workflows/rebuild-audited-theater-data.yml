@@ -1,6 +1,9 @@
 name: Rebuild audited Die Räuber data
 
 on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
   schedule:
     - cron: '*/5 * * * *'
   workflow_dispatch:
@@ -46,8 +49,7 @@ jobs:
               chunks.append(json.loads(match.group(1)))
 
           joined = ''.join(chunks)
-          cleaned = re.sub(r'[^A-Za-z0-9+/=]', '', joined)
-          cleaned = cleaned.rstrip('=')
+          cleaned = re.sub(r'[^A-Za-z0-9+/=]', '', joined).rstrip('=')
           cleaned += '=' * ((4 - len(cleaned) % 4) % 4)
           raw = gzip.decompress(base64.b64decode(cleaned, validate=True)).decode('utf-8')
           data = json.loads(raw)
@@ -60,8 +62,6 @@ jobs:
           if len(data.get('acts', [])) != 5 or len(data.get('scenes', [])) != 15:
               raise RuntimeError('Act or scene structure is incomplete')
 
-          # The preserved data numbers the title sheet as page 1. The UI uses
-          # printed page numbers, so the title becomes page 0 and text pages 1-63.
           for paragraph in paragraphs:
               paragraph['page'] = max(0, int(paragraph.get('page', 1)) - 1)
           for key in ('acts', 'scenes', 'pages'):
