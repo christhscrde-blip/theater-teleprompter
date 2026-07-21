@@ -4,59 +4,91 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#09090b">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Die Räuber">
   <title>Die Räuber · Theater-Teleprompter</title>
-  <link rel="manifest" href="manifest.webmanifest?v=7">
-  <link rel="stylesheet" href="styles.css?v=7">
+  <link rel="manifest" href="manifest.webmanifest?v=8">
+  <link rel="stylesheet" href="styles.css?v=8">
 </head>
 <body class="dark">
   <header class="topbar">
-    <div><p class="eyebrow">Taugliches Amateur Theater</p><h1>Die Räuber · Teleprompter</h1></div>
+    <div class="brand">
+      <p class="eyebrow">Taugliches Amateur Theater</p>
+      <h1>Die Räuber · Teleprompter</h1>
+    </div>
     <div class="top-actions">
-      <button id="menuButton" class="secondary mobile-menu" type="button">Navigation</button>
+      <button id="menuButton" class="secondary mobile-menu" type="button" aria-controls="sidebar" aria-expanded="false">Navigation</button>
       <button id="themeButton" class="secondary" type="button">Heller Modus</button>
       <button id="fullscreenButton" class="secondary" type="button">Vollbild</button>
     </div>
   </header>
+
   <main>
     <section id="prompterPanel" class="prompter-panel" aria-label="Theater-Teleprompter">
-      <aside id="sidebar" class="sidebar">
-        <div class="sidebar-header"><div><p class="eyebrow">Direkt springen</p><h2>Navigation</h2></div><button id="closeMenuButton" class="ghost close-menu" type="button" aria-label="Navigation schließen">×</button></div>
-        <div class="nav-tabs" role="tablist" aria-label="Navigationsart">
-          <button class="nav-tab active" data-nav="acts" type="button">Akte</button>
-          <button class="nav-tab" data-nav="scenes" type="button">Szenen</button>
-          <button class="nav-tab" data-nav="pages" type="button">Seiten</button>
+      <aside id="sidebar" class="sidebar" aria-label="Navigation">
+        <div class="sidebar-header">
+          <div><p class="eyebrow">Direkt springen</p><h2>Navigation</h2></div>
+          <button id="closeMenuButton" class="ghost close-menu" type="button" aria-label="Navigation schließen">×</button>
         </div>
+
+        <div class="nav-tabs" role="tablist" aria-label="Navigationsart">
+          <button class="nav-tab active" data-nav="acts" role="tab" aria-selected="true" type="button">Akte</button>
+          <button class="nav-tab" data-nav="scenes" role="tab" aria-selected="false" type="button">Szenen</button>
+          <button class="nav-tab" data-nav="pages" role="tab" aria-selected="false" type="button">Seiten</button>
+        </div>
+
         <nav id="navigationList" class="navigation-list" aria-label="Textnavigation"></nav>
-        <div class="jump-box"><label for="pageInput">Seite direkt öffnen</label><div><input id="pageInput" type="number" min="1" inputmode="numeric" aria-label="Seitennummer"><button id="pageJumpButton" type="button">Los</button></div></div>
+
+        <div class="jump-box">
+          <label for="pageInput">Gedruckte Seite öffnen</label>
+          <div>
+            <input id="pageInput" type="number" min="1" inputmode="numeric" aria-label="Seitennummer" placeholder="1–63">
+            <button id="pageJumpButton" type="button">Los</button>
+          </div>
+        </div>
       </aside>
-      <div id="sidebarBackdrop" class="sidebar-backdrop"></div>
+      <div id="sidebarBackdrop" class="sidebar-backdrop" aria-hidden="true"></div>
+
       <div class="stage-wrap">
-        <div class="statusbar"><span id="locationText">ERSTER AKT · 1. SZENE</span><span><span id="pageText">Seite 1</span> · <span id="progressText">0 %</span></span></div>
-        <div id="stage" class="stage" tabindex="0" aria-live="off"><div class="reading-guide" aria-hidden="true"></div><article id="scriptDisplay" class="script-display"><p class="loading-text">„Die Räuber“ wird geladen …</p></article></div>
+        <div class="statusbar" aria-live="polite">
+          <span id="locationText">Die Räuber</span>
+          <span><span id="pageText">Wird geladen</span> · <span id="progressText">0 %</span></span>
+        </div>
+
+        <div id="stage" class="stage" tabindex="0" aria-label="Theatertext">
+          <div class="reading-guide" aria-hidden="true"></div>
+          <article id="scriptDisplay" class="script-display">
+            <p class="loading-text">„Die Räuber“ wird geladen …</p>
+          </article>
+        </div>
+
         <div class="controls" aria-label="Teleprompter-Steuerung">
           <button id="previousPageButton" class="secondary control-button" type="button">← Seite</button>
           <button id="rewindButton" class="secondary control-button" type="button">−10 s</button>
-          <button id="playButton" class="primary control-button" type="button">Start</button>
+          <button id="playButton" class="primary control-button" type="button" aria-pressed="false">Start</button>
           <button id="forwardButton" class="secondary control-button" type="button">+10 s</button>
           <button id="nextPageButton" class="secondary control-button" type="button">Seite →</button>
-          <label class="slider-control"><span>Tempo <strong id="speedValue">24</strong></span><input id="speedInput" type="range" min="4" max="100" value="24"></label>
-          <label class="slider-control"><span>Schrift <strong id="fontValue">46</strong></span><input id="fontInput" type="range" min="28" max="82" value="46"></label>
-          <label class="slider-control"><span>Zeilenhöhe <strong id="lineHeightValue">1.55</strong></span><input id="lineHeightInput" type="range" min="1.25" max="2" step="0.05" value="1.55"></label>
+
+          <label class="slider-control">
+            <span>Tempo <strong id="speedValue">24</strong></span>
+            <input id="speedInput" type="range" min="4" max="100" value="24">
+          </label>
+          <label class="slider-control">
+            <span>Schrift <strong id="fontValue">46</strong></span>
+            <input id="fontInput" type="range" min="28" max="82" value="46">
+          </label>
+          <label class="slider-control">
+            <span>Zeilenhöhe <strong id="lineHeightValue">1.55</strong></span>
+            <input id="lineHeightInput" type="range" min="1.25" max="2" step="0.05" value="1.55">
+          </label>
         </div>
       </div>
     </section>
   </main>
-  <script src="https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js"></script>
-  <script src="data/chunk-01.js?v=7"></script>
-  <script src="data/chunk-02.js?v=7"></script>
-  <script src="data/chunk-03.js?v=7"></script>
-  <script src="data/chunk-04.js?v=7"></script>
-  <script src="data/chunk-05.js?v=7"></script>
-  <script src="data/chunk-06.js?v=7"></script>
-  <script src="data/chunk-07.js?v=7"></script>
-  <script src="data/chunk-08.js?v=7"></script>
-  <script src="data/chunk-09.js?v=7"></script>
-  <script src="script-data.js?v=7"></script>
-  <script src="app.js?v=7" defer></script>
+
+  <noscript>Für den Teleprompter muss JavaScript aktiviert sein.</noscript>
+  <script src="theater-loader.js?v=8"></script>
+  <script src="app.js?v=8" defer></script>
 </body>
 </html>
