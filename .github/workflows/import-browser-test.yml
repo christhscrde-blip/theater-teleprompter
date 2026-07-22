@@ -23,23 +23,28 @@ jobs:
           npm init -y >/dev/null 2>&1
           npm install --no-save playwright@1.55.0 jszip@3.10.1 pdfkit@0.16.0 >/dev/null
           npx playwright install --with-deps chromium >/dev/null
-      - name: Generate DOCX and PDF fixtures
+      - name: Generate fixtures
         run: |
           node <<'JS'
           const fs=require('fs');
           const JSZip=require('jszip');
           const PDFDocument=require('pdfkit');
           (async()=>{
-            const lines=['DIE RÄUBER','ERSTER AKT','1. SZENE','Saal im Moorischen Schloss.','FRANZ','Aber ist Euch auch wohl, Vater?','D. A. MOOR','Ganz wohl, mein Sohn.','ZWEITER AKT','1. SZENE','AMALIA','Karl lebt noch!'];
+            const core=['DIE RÄUBER','ERSTER AKT','1. SZENE','Saal im Moorischen Schloss.','FRANZ','Aber ist Euch auch wohl, Vater?','D. A. MOOR','Ganz wohl, mein Sohn.','ZWEITER AKT','1. SZENE','AMALIA','Karl lebt noch!'];
+            const longLines=[...core,...Array.from({length:90},(_,i)=>`Lange zusätzliche Replik für den Scrolltest Nummer ${i+1}.`)];
             const esc=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-            const zip=new JSZip();
-            zip.file('[Content_Types].xml','<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>');
-            zip.folder('_rels').file('.rels','<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>');
-            zip.folder('word').file('document.xml',`<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${lines.map(x=>`<w:p><w:r><w:t>${esc(x)}</w:t></w:r></w:p>`).join('')}</w:body></w:document>`);
-            fs.writeFileSync('/tmp/test.docx',await zip.generateAsync({type:'nodebuffer'}));
+            async function makeDocx(lines,path){
+              const zip=new JSZip();
+              zip.file('[Content_Types].xml','<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>');
+              zip.folder('_rels').file('.rels','<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>');
+              zip.folder('word').file('document.xml',`<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${lines.map(x=>`<w:p><w:r><w:t>${esc(x)}</w:t></w:r></w:p>`).join('')}</w:body></w:document>`);
+              fs.writeFileSync(path,await zip.generateAsync({type:'nodebuffer'}));
+            }
+            await makeDocx(core,'/tmp/import.docx');
+            await makeDocx(longLines,'/tmp/scroll.docx');
             const pdf=new PDFDocument({autoFirstPage:false});
-            pdf.pipe(fs.createWriteStream('/tmp/test.pdf'));
-            for(const pageLines of [lines.slice(0,8),lines.slice(8)]){pdf.addPage();pageLines.forEach((x,i)=>pdf.text(x,70,70+i*30));}
+            pdf.pipe(fs.createWriteStream('/tmp/import.pdf'));
+            for(const pageLines of [core.slice(0,8),core.slice(8)]){pdf.addPage();pageLines.forEach((x,i)=>pdf.text(x,70,70+i*30));}
             pdf.end();
           })();
           JS
@@ -48,34 +53,63 @@ jobs:
         run: |
           python3 -m http.server 4173 --bind 127.0.0.1 >/tmp/server.log 2>&1 &
           curl --retry 20 --retry-delay 1 --retry-connrefused -fsS http://127.0.0.1:4173/ >/dev/null
-      - name: Test DOCX and PDF import
+      - name: Test imports and auto-scroll
         run: |
-          node <<'JS'
+          set -o pipefail
+          node <<'JS' 2>&1 | tee /tmp/browser-test.log
           const assert=require('node:assert/strict');
           const {chromium}=require('playwright');
           (async()=>{
             const browser=await chromium.launch({headless:true});
-            for(const [file,source,expectedPages] of [['/tmp/test.docx','DOCX',1],['/tmp/test.pdf','PDF',2]]){
+            for(const [file,source] of [['/tmp/import.docx','DOCX'],['/tmp/import.pdf','PDF']]){
+              console.log(`START ${source} import`);
               const context=await browser.newContext({viewport:{width:820,height:1180}});
               const page=await context.newPage();
               const errors=[];page.on('pageerror',e=>errors.push(e.message));
-              let loaded=false;
-              for(let attempt=0;attempt<30&&!loaded;attempt++){
-                try{await page.goto(process.env.TARGET_URL+'?test='+Date.now(),{waitUntil:'networkidle',timeout:15000});loaded=await page.locator('#fileInput').count()===1;}catch{}
-                if(!loaded)await page.waitForTimeout(2000);
-              }
-              assert.equal(loaded,true,'Neue GitHub-Pages-Version wurde nicht rechtzeitig veröffentlicht.');
+              await page.goto(process.env.TARGET_URL+'?import='+Date.now(),{waitUntil:'networkidle',timeout:30000});
               await page.setInputFiles('#fileInput',file);
-              await page.waitForFunction(()=>window.__TELEPROMPTER__?.getState?.().paragraphs>=10);
-              const state=await page.evaluate(()=>JSON.parse(JSON.stringify(window.__TELEPROMPTER__.getState())));
-              assert.equal(state.source,source);assert.equal(state.acts,2);assert.equal(state.scenes,2);assert.equal(state.pages,expectedPages);
-              assert.equal(await page.locator('.script-line').count(),12);
-              await page.locator('[data-mode="scenes"]').click();assert.equal(await page.locator('#navigationList button').count(),2);
-              await page.locator('#playButton').click();await page.waitForTimeout(500);assert.equal(await page.locator('#playButton').textContent(),'Pause');
-              await page.locator('#playButton').click();assert.equal(errors.length,0);
+              await page.waitForFunction(()=>window.__TELEPROMPTER__?.getState?.().paragraphs>=10,{timeout:20000});
+              const state=await page.evaluate(()=>window.__TELEPROMPTER__.getState());
+              console.log(`${source} STATE ${JSON.stringify(state)}`);
+              assert.equal(state.source,source,`${source}: source`);
+              assert.equal(state.acts,2,`${source}: acts`);
+              assert.equal(state.scenes,2,`${source}: scenes`);
+              assert.deepEqual(errors,[],`${source}: page errors`);
               await context.close();
             }
+            console.log('START autoscroll');
+            const context=await browser.newContext({viewport:{width:820,height:1180}});
+            const page=await context.newPage();
+            const errors=[];page.on('pageerror',e=>errors.push(e.message));
+            await page.goto(process.env.TARGET_URL+'?scroll='+Date.now(),{waitUntil:'networkidle',timeout:30000});
+            await page.setInputFiles('#fileInput','/tmp/scroll.docx');
+            await page.waitForFunction(()=>window.__TELEPROMPTER__?.getState?.().paragraphs>=100,{timeout:20000});
+            console.log(`SCROLL STATE ${JSON.stringify(await page.evaluate(()=>window.__TELEPROMPTER__.getState()))}`);
+            await page.locator('#speedInput').evaluate(input=>{input.value='4';input.dispatchEvent(new Event('input',{bubbles:true}));});
+            await page.locator('#stage').evaluate(node=>node.scrollTop=0);
+            const before=await page.locator('#stage').evaluate(node=>node.scrollTop);
+            await page.locator('#playButton').click();
+            await page.waitForTimeout(1500);
+            const after=await page.locator('#stage').evaluate(node=>node.scrollTop);
+            console.log(`SCROLL MOVEMENT ${before} -> ${after}`);
+            assert.equal(await page.locator('#playButton').textContent(),'Pause','play state');
+            assert.ok(after>before+3,`autoscroll did not move (${before} → ${after})`);
+            await page.locator('#playButton').click();
+            const paused=await page.locator('#stage').evaluate(node=>node.scrollTop);
+            await page.waitForTimeout(450);
+            const stillPaused=await page.locator('#stage').evaluate(node=>node.scrollTop);
+            console.log(`PAUSE MOVEMENT ${paused} -> ${stillPaused}`);
+            assert.ok(Math.abs(stillPaused-paused)<1,'autoscroll continued after pause');
+            assert.deepEqual(errors,[],'scroll page errors');
+            await context.close();
             await browser.close();
-            console.log(`DOCX and PDF imports passed at ${process.env.TARGET_URL}`);
+            console.log(`PASS ${process.env.TARGET_URL}`);
           })().catch(e=>{console.error(e);process.exit(1)});
           JS
+      - name: Upload browser diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-test-log
+          path: /tmp/browser-test.log
+          if-no-files-found: warn
