@@ -1,37 +1,29 @@
-# Die Räuber · Theater-Teleprompter
+# Theater-Teleprompter
 
-Browserbasierter Teleprompter ausschließlich für das formatierte Bühnenmanuskript **„Die Räuber“**. Optimiert für iPad, Smartphone, Notebook und externe Bildschirme.
+Ein einfacher, vollständig browserbasierter Teleprompter für Theatertexte.
 
-## Datenbasis
+## Verwendung
 
-Der vollständige Text ist fest im Repository enthalten. Vier unveränderliche Datenpakete werden beim Öffnen gemeinsam geladen, im Browser entpackt und anschließend streng validiert. Es gibt keinen Dokumentimport, keine frei austauschbaren Stücke und keine externe JavaScript-Bibliothek.
+1. GitHub-Pages-Seite öffnen.
+2. Eine `.docx`- oder textbasierte `.pdf`-Datei auswählen.
+3. Der Text wird ausschließlich lokal im Browser verarbeitet.
 
-- 1.457 nicht-leere Absätze
-- 5 Akte
-- 15 Szenen
-- 63 gedruckte Textseiten plus Titelblatt
-- Quelle: `Theater.Text.Neu.formatiert.docx`
-- Seitenabgleich: `Theater.Text.Neu.formatiert.pdf`
+Es werden keine Stücktexte oder Beispieldateien im Repository gespeichert.
 
-## Funktionen
+## Import
 
-- Navigation nach Akt, Szene und gedruckter Seite
-- direkter Seitensprung sowie Vor-/Zurück-Tasten
-- automatisches Scrollen mit einstellbarem Tempo
-- einstellbare Schriftgröße und Zeilenhöhe
-- semantische Darstellung von Akt, Szene, Szenenbild, Sprecher, Replik und Regieanweisung
-- Leselinie, Nachtmodus und Präsentationsmodus
-- responsive Navigation für iPad und Smartphone
-- Offline-Nutzung über einen Service Worker
+- **PDF:** übernimmt die tatsächlichen PDF-Seiten.
+- **DOCX:** liest Absätze, Akte, Szenen, Sprecher und Regieanweisungen. Enthält die Datei keine verlässlichen festen Seitenumbrüche, werden stabile logische Teleprompter-Seiten erzeugt.
+- Die formatierte Fassung von **„Die Räuber“** wird anhand ihrer Struktur erkannt und in 64 logische Seiten gegliedert.
+- Eingescannte PDFs ohne Textschicht benötigen vorher OCR.
 
-## Tastatur
+## Steuerung
 
-- `Leertaste`: Start/Pause
-- `Pfeil links/rechts`: vorherige/nächste Seite
-- `Pfeil hoch/runter`: Tempo ändern
-- `F`: Vollbild beziehungsweise Präsentationsmodus
-- `M`: Navigation öffnen/schließen
+- Leertaste: Start/Pause
+- Pfeil links/rechts: Seite wechseln
+- F: Vollbild
+- Regler: Tempo, Schriftgröße und Zeilenhöhe
 
-## GitHub Pages
+## Datenschutz
 
-Die Seite besteht ausschließlich aus statischen Dateien und kann direkt aus dem Branch `main` über GitHub Pages veröffentlicht werden. Ein eigener Build- oder Deployment-Workflow ist nicht erforderlich.
+Die ausgewählte Datei verlässt das Gerät nicht. Es gibt keinen Upload und kein Backend.

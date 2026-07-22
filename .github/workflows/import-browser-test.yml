@@ -1,0 +1,71 @@
+name: Import browser test
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install browser tools
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install --no-save playwright@1.55.0 jszip@3.10.1 pdfkit@0.16.0 >/dev/null
+          npx playwright install --with-deps chromium >/dev/null
+      - name: Generate DOCX and PDF fixtures
+        run: |
+          node <<'JS'
+          const fs=require('fs');
+          const JSZip=require('jszip');
+          const PDFDocument=require('pdfkit');
+          (async()=>{
+            const lines=['DIE RÄUBER','ERSTER AKT','1. SZENE','Saal im Moorischen Schloss.','FRANZ','Aber ist Euch auch wohl, Vater?','D. A. MOOR','Ganz wohl, mein Sohn.','ZWEITER AKT','1. SZENE','AMALIA','Karl lebt noch!'];
+            const esc=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+            const zip=new JSZip();
+            zip.file('[Content_Types].xml','<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>');
+            zip.folder('_rels').file('.rels','<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>');
+            zip.folder('word').file('document.xml',`<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${lines.map(x=>`<w:p><w:r><w:t>${esc(x)}</w:t></w:r></w:p>`).join('')}</w:body></w:document>`);
+            fs.writeFileSync('/tmp/test.docx',await zip.generateAsync({type:'nodebuffer'}));
+            const pdf=new PDFDocument({autoFirstPage:false});
+            pdf.pipe(fs.createWriteStream('/tmp/test.pdf'));
+            for(const pageLines of [lines.slice(0,8),lines.slice(8)]){pdf.addPage();pageLines.forEach((x,i)=>pdf.text(x,70,70+i*30));}
+            pdf.end();
+          })();
+          JS
+      - name: Start server
+        run: |
+          python3 -m http.server 4173 --bind 127.0.0.1 >/tmp/server.log 2>&1 &
+          curl --retry 20 --retry-delay 1 --retry-connrefused -fsS http://127.0.0.1:4173/ >/dev/null
+      - name: Test DOCX and PDF import
+        run: |
+          node <<'JS'
+          const assert=require('node:assert/strict');
+          const {chromium}=require('playwright');
+          (async()=>{
+            const browser=await chromium.launch({headless:true});
+            for(const [file,source,expectedPages] of [['/tmp/test.docx','DOCX',1],['/tmp/test.pdf','PDF',2]]){
+              const context=await browser.newContext({viewport:{width:820,height:1180}});
+              const page=await context.newPage();
+              const errors=[];page.on('pageerror',e=>errors.push(e.message));
+              await page.goto('http://127.0.0.1:4173/',{waitUntil:'networkidle'});
+              await page.setInputFiles('#fileInput',file);
+              await page.waitForFunction(()=>window.__TELEPROMPTER__?.getState?.().paragraphs>=10);
+              const state=await page.evaluate(()=>JSON.parse(JSON.stringify(window.__TELEPROMPTER__.getState())));
+              assert.equal(state.source,source);assert.equal(state.acts,2);assert.equal(state.scenes,2);assert.equal(state.pages,expectedPages);
+              assert.equal(await page.locator('.script-line').count(),12);
+              await page.locator('[data-mode="scenes"]').click();assert.equal(await page.locator('#navigationList button').count(),2);
+              await page.locator('#playButton').click();await page.waitForTimeout(500);assert.equal((await page.locator('#playButton').textContent()),'Pause');
+              await page.locator('#playButton').click();assert.equal(errors.length,0);
+              await context.close();
+            }
+            await browser.close();
+            console.log('DOCX and PDF browser imports passed.');
+          })().catch(e=>{console.error(e);process.exit(1)});
+          JS
