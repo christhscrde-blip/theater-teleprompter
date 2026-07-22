@@ -30,7 +30,8 @@ jobs:
           const JSZip=require('jszip');
           const PDFDocument=require('pdfkit');
           (async()=>{
-            const lines=['DIE RÄUBER','ERSTER AKT','1. SZENE','Saal im Moorischen Schloss.','FRANZ','Aber ist Euch auch wohl, Vater?','D. A. MOOR','Ganz wohl, mein Sohn.','ZWEITER AKT','1. SZENE','AMALIA','Karl lebt noch!'];
+            const core=['DIE RÄUBER','ERSTER AKT','1. SZENE','Saal im Moorischen Schloss.','FRANZ','Aber ist Euch auch wohl, Vater?','D. A. MOOR','Ganz wohl, mein Sohn.','ZWEITER AKT','1. SZENE','AMALIA','Karl lebt noch!'];
+            const lines=[...core,...Array.from({length:48},(_,i)=>`Zusätzliche Replik für den Scrolltest ${i+1}.`)];
             const esc=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
             const zip=new JSZip();
             zip.file('[Content_Types].xml','<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>');
@@ -39,7 +40,7 @@ jobs:
             fs.writeFileSync('/tmp/test.docx',await zip.generateAsync({type:'nodebuffer'}));
             const pdf=new PDFDocument({autoFirstPage:false});
             pdf.pipe(fs.createWriteStream('/tmp/test.pdf'));
-            for(const pageLines of [lines.slice(0,8),lines.slice(8)]){pdf.addPage();pageLines.forEach((x,i)=>pdf.text(x,70,70+i*30));}
+            for(const pageLines of [lines.slice(0,30),lines.slice(30)]){pdf.addPage();pageLines.forEach((x,i)=>pdf.text(x,55,45+i*22));}
             pdf.end();
           })();
           JS
@@ -48,14 +49,14 @@ jobs:
         run: |
           python3 -m http.server 4173 --bind 127.0.0.1 >/tmp/server.log 2>&1 &
           curl --retry 20 --retry-delay 1 --retry-connrefused -fsS http://127.0.0.1:4173/ >/dev/null
-      - name: Test DOCX and PDF import
+      - name: Test DOCX, PDF and auto-scroll
         run: |
           node <<'JS'
           const assert=require('node:assert/strict');
           const {chromium}=require('playwright');
           (async()=>{
             const browser=await chromium.launch({headless:true});
-            for(const [file,source,expectedPages] of [['/tmp/test.docx','DOCX',1],['/tmp/test.pdf','PDF',2]]){
+            for(const [file,source,expectedPages] of [['/tmp/test.docx','DOCX',3],['/tmp/test.pdf','PDF',2]]){
               const context=await browser.newContext({viewport:{width:820,height:1180}});
               const page=await context.newPage();
               const errors=[];page.on('pageerror',e=>errors.push(e.message));
@@ -66,16 +67,27 @@ jobs:
               }
               assert.equal(loaded,true,'Neue GitHub-Pages-Version wurde nicht rechtzeitig veröffentlicht.');
               await page.setInputFiles('#fileInput',file);
-              await page.waitForFunction(()=>window.__TELEPROMPTER__?.getState?.().paragraphs>=10);
+              await page.waitForFunction(()=>window.__TELEPROMPTER__?.getState?.().paragraphs>=60);
               const state=await page.evaluate(()=>JSON.parse(JSON.stringify(window.__TELEPROMPTER__.getState())));
               assert.equal(state.source,source);assert.equal(state.acts,2);assert.equal(state.scenes,2);assert.equal(state.pages,expectedPages);
-              assert.equal(await page.locator('.script-line').count(),12);
+              assert.equal(await page.locator('.script-line').count(),60);
               await page.locator('[data-mode="scenes"]').click();assert.equal(await page.locator('#navigationList button').count(),2);
-              await page.locator('#playButton').click();await page.waitForTimeout(500);assert.equal(await page.locator('#playButton').textContent(),'Pause');
-              await page.locator('#playButton').click();assert.equal(errors.length,0);
+              await page.locator('#speedInput').fill('4');
+              const before=await page.locator('#stage').evaluate(node=>node.scrollTop);
+              await page.locator('#playButton').click();
+              await page.waitForTimeout(1200);
+              const after=await page.locator('#stage').evaluate(node=>node.scrollTop);
+              assert.equal(await page.locator('#playButton').textContent(),'Pause');
+              assert.ok(after>before+2,`Autoscroll bewegte sich nicht: ${before} → ${after}`);
+              await page.locator('#playButton').click();
+              const paused=await page.locator('#stage').evaluate(node=>node.scrollTop);
+              await page.waitForTimeout(350);
+              const stillPaused=await page.locator('#stage').evaluate(node=>node.scrollTop);
+              assert.ok(Math.abs(stillPaused-paused)<1,'Autoscroll lief nach Pause weiter.');
+              assert.equal(errors.length,0);
               await context.close();
             }
             await browser.close();
-            console.log(`DOCX and PDF imports passed at ${process.env.TARGET_URL}`);
+            console.log(`DOCX, PDF and auto-scroll passed at ${process.env.TARGET_URL}`);
           })().catch(e=>{console.error(e);process.exit(1)});
           JS
