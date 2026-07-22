@@ -55,13 +55,14 @@ jobs:
           curl --retry 20 --retry-delay 1 --retry-connrefused -fsS http://127.0.0.1:4173/ >/dev/null
       - name: Test imports and auto-scroll
         run: |
-          node <<'JS'
+          set -o pipefail
+          node <<'JS' 2>&1 | tee /tmp/browser-test.log
           const assert=require('node:assert/strict');
           const {chromium}=require('playwright');
           (async()=>{
             const browser=await chromium.launch({headless:true});
-
             for(const [file,source] of [['/tmp/import.docx','DOCX'],['/tmp/import.pdf','PDF']]){
+              console.log(`START ${source} import`);
               const context=await browser.newContext({viewport:{width:820,height:1180}});
               const page=await context.newPage();
               const errors=[];page.on('pageerror',e=>errors.push(e.message));
@@ -69,35 +70,46 @@ jobs:
               await page.setInputFiles('#fileInput',file);
               await page.waitForFunction(()=>window.__TELEPROMPTER__?.getState?.().paragraphs>=10,{timeout:20000});
               const state=await page.evaluate(()=>window.__TELEPROMPTER__.getState());
+              console.log(`${source} STATE ${JSON.stringify(state)}`);
               assert.equal(state.source,source,`${source}: source`);
               assert.equal(state.acts,2,`${source}: acts`);
               assert.equal(state.scenes,2,`${source}: scenes`);
               assert.deepEqual(errors,[],`${source}: page errors`);
               await context.close();
             }
-
+            console.log('START autoscroll');
             const context=await browser.newContext({viewport:{width:820,height:1180}});
             const page=await context.newPage();
             const errors=[];page.on('pageerror',e=>errors.push(e.message));
             await page.goto(process.env.TARGET_URL+'?scroll='+Date.now(),{waitUntil:'networkidle',timeout:30000});
             await page.setInputFiles('#fileInput','/tmp/scroll.docx');
             await page.waitForFunction(()=>window.__TELEPROMPTER__?.getState?.().paragraphs>=100,{timeout:20000});
+            console.log(`SCROLL STATE ${JSON.stringify(await page.evaluate(()=>window.__TELEPROMPTER__.getState()))}`);
             await page.locator('#speedInput').evaluate(input=>{input.value='4';input.dispatchEvent(new Event('input',{bubbles:true}));});
             await page.locator('#stage').evaluate(node=>node.scrollTop=0);
             const before=await page.locator('#stage').evaluate(node=>node.scrollTop);
             await page.locator('#playButton').click();
             await page.waitForTimeout(1500);
             const after=await page.locator('#stage').evaluate(node=>node.scrollTop);
+            console.log(`SCROLL MOVEMENT ${before} -> ${after}`);
             assert.equal(await page.locator('#playButton').textContent(),'Pause','play state');
             assert.ok(after>before+3,`autoscroll did not move (${before} → ${after})`);
             await page.locator('#playButton').click();
             const paused=await page.locator('#stage').evaluate(node=>node.scrollTop);
             await page.waitForTimeout(450);
             const stillPaused=await page.locator('#stage').evaluate(node=>node.scrollTop);
+            console.log(`PAUSE MOVEMENT ${paused} -> ${stillPaused}`);
             assert.ok(Math.abs(stillPaused-paused)<1,'autoscroll continued after pause');
             assert.deepEqual(errors,[],'scroll page errors');
             await context.close();
             await browser.close();
-            console.log(`DOCX, PDF and low-speed auto-scroll passed at ${process.env.TARGET_URL}`);
+            console.log(`PASS ${process.env.TARGET_URL}`);
           })().catch(e=>{console.error(e);process.exit(1)});
           JS
+      - name: Upload browser diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-test-log
+          path: /tmp/browser-test.log
+          if-no-files-found: warn
