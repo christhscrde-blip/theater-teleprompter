@@ -14,6 +14,7 @@ Es werden keine Stücktexte oder Beispieldateien im Repository gespeichert.
 
 - **PDF:** übernimmt die tatsächlichen PDF-Seiten.
 - **DOCX:** liest Absätze, Akte, Szenen, Sprecher und Regieanweisungen. Enthält die Datei keine verlässlichen festen Seitenumbrüche, werden stabile logische Teleprompter-Seiten erzeugt.
+- Einzelne Zeilenangaben wie `5`, `10`, `15` oder `Zeile 20` werden beim Import automatisch ausgeblendet. Die Erkennung greift nur bei alleinstehenden Vielfachen von fünf, damit nummerierter Inhalt und Szenenüberschriften erhalten bleiben.
 - Die formatierte Fassung von **„Die Räuber“** wird anhand ihrer Struktur erkannt und in 64 logische Seiten gegliedert.
 - Eingescannte PDFs ohne Textschicht benötigen vorher OCR.
 
