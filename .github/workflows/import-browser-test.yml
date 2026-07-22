@@ -3,6 +3,8 @@ name: Import browser test
 on:
   pull_request:
     branches: [main]
+  push:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -11,7 +13,9 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 15
+    env:
+      TARGET_URL: ${{ github.event_name == 'push' && 'https://christhscrde-blip.github.io/theater-teleprompter/' || 'http://127.0.0.1:4173/' }}
     steps:
       - uses: actions/checkout@v4
       - name: Install browser tools
@@ -39,7 +43,8 @@ jobs:
             pdf.end();
           })();
           JS
-      - name: Start server
+      - name: Start local server
+        if: github.event_name != 'push'
         run: |
           python3 -m http.server 4173 --bind 127.0.0.1 >/tmp/server.log 2>&1 &
           curl --retry 20 --retry-delay 1 --retry-connrefused -fsS http://127.0.0.1:4173/ >/dev/null
@@ -54,18 +59,23 @@ jobs:
               const context=await browser.newContext({viewport:{width:820,height:1180}});
               const page=await context.newPage();
               const errors=[];page.on('pageerror',e=>errors.push(e.message));
-              await page.goto('http://127.0.0.1:4173/',{waitUntil:'networkidle'});
+              let loaded=false;
+              for(let attempt=0;attempt<30&&!loaded;attempt++){
+                try{await page.goto(process.env.TARGET_URL+'?test='+Date.now(),{waitUntil:'networkidle',timeout:15000});loaded=await page.locator('#fileInput').count()===1;}catch{}
+                if(!loaded)await page.waitForTimeout(2000);
+              }
+              assert.equal(loaded,true,'Neue GitHub-Pages-Version wurde nicht rechtzeitig veröffentlicht.');
               await page.setInputFiles('#fileInput',file);
               await page.waitForFunction(()=>window.__TELEPROMPTER__?.getState?.().paragraphs>=10);
               const state=await page.evaluate(()=>JSON.parse(JSON.stringify(window.__TELEPROMPTER__.getState())));
               assert.equal(state.source,source);assert.equal(state.acts,2);assert.equal(state.scenes,2);assert.equal(state.pages,expectedPages);
               assert.equal(await page.locator('.script-line').count(),12);
               await page.locator('[data-mode="scenes"]').click();assert.equal(await page.locator('#navigationList button').count(),2);
-              await page.locator('#playButton').click();await page.waitForTimeout(500);assert.equal((await page.locator('#playButton').textContent()),'Pause');
+              await page.locator('#playButton').click();await page.waitForTimeout(500);assert.equal(await page.locator('#playButton').textContent(),'Pause');
               await page.locator('#playButton').click();assert.equal(errors.length,0);
               await context.close();
             }
             await browser.close();
-            console.log('DOCX and PDF browser imports passed.');
+            console.log(`DOCX and PDF imports passed at ${process.env.TARGET_URL}`);
           })().catch(e=>{console.error(e);process.exit(1)});
           JS
