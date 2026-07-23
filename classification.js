@@ -30,6 +30,11 @@ function speakerKey(text){
     .replace(/\s+/g,' ')
     .toLocaleLowerCase('de-DE');
 }
+export function speakerLabel(text){
+  return clean(text)
+    .replace(/\s*\([^)]*\)\s*[.:–—-]*\s*$/u,'')
+    .replace(/\s*[.:–—-]+\s*$/u,'');
+}
 function labelShape(text){
   const base=clean(text).replace(/\s*\([^)]*\)\s*[.:–—-]*\s*$/u,'').replace(/\s*[.:–—-]+\s*$/u,'');
   if(!base||base.length>55||/[!?;,„“"]/u.test(base))return false;
@@ -57,7 +62,8 @@ function repeatedSpeakerLabels(lines){
   const knownFinalWords=new Set([...counts].filter(([,count])=>count>=2).map(([key])=>key.split(/\s+/).at(-1)?.replace(/[^\p{L}]/gu,'')));
   for(const [key,count] of inlineCounts){
     const finalWord=key.split(/\s+/).at(-1)?.replace(/[^\p{L}]/gu,'');
-    if(count>=3||knownFinalWords.has(finalWord))counts.set(key,Math.max(counts.get(key)||0,count,2));
+    const combined=counts.has(key)?counts.get(key)+count:count;
+    if((counts.has(key)&&combined>=2)||count>=3||knownFinalWords.has(finalWord))counts.set(key,Math.max(combined,2));
   }
   return counts;
 }
@@ -125,7 +131,7 @@ export function makeModel(rawPages,title,source){
   const allLines=prepared.flat();
   const counts=repeatedSpeakerLabels(allLines);
   const paragraphs=[],pages=[];
-  let act=null,scene=null,globalIndex=0;
+  let act=null,scene=null,currentSpeaker='',globalIndex=0;
 
   prepared.forEach((lines,pageIndex)=>{
     const firstIndex=paragraphs.length;
@@ -135,9 +141,11 @@ export function makeModel(rawPages,title,source){
       const next=lines[lineIndex+1]||prepared[pageIndex+1]?.[0]||null;
       const inline=inlineSpeaker(line.text,counts);
       const type=inline?'speaker-dialogue':classify(line,previous,next,counts);
-      if(type==='act'){act=line.text.toUpperCase();scene=null}
-      if(type==='scene')scene=line.text.toUpperCase();
-      paragraphs.push({...line,...inline,type,page:pageIndex+1,act,scene,index:globalIndex++});
+      if(type==='act'){act=line.text.toUpperCase();scene=null;currentSpeaker=''}
+      if(type==='scene'){scene=line.text.toUpperCase();currentSpeaker=''}
+      if(type==='speaker')currentSpeaker=speakerLabel(line.text);
+      if(type==='speaker-dialogue')currentSpeaker=speakerLabel(inline.speakerPrefix);
+      paragraphs.push({...line,...inline,type,speaker:currentSpeaker,page:pageIndex+1,act,scene,index:globalIndex++});
     }
     if(paragraphs.length>firstIndex)pages.push({page:pages.length+1,firstIndex,lastIndex:paragraphs.length-1});
   });

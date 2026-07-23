@@ -1,6 +1,6 @@
 import test from'node:test';
 import assert from'node:assert/strict';
-import{makeModel,isLineNumber,withoutPdfLineNumber}from'../classification.js';
+import{makeModel,isLineNumber,withoutPdfLineNumber,speakerLabel}from'../classification.js';
 
 const types=lines=>makeModel([lines],'Test','DOCX').paragraphs.map(({text,type})=>[text,type]);
 
@@ -75,4 +75,29 @@ test('removes only valid theatre line numbers',()=>{
   assert.equal(isLineNumber('Zeile 20'),true);
   assert.equal(isLineNumber('21'),false);
   assert.equal(withoutPdfLineNumber('20 FRANZ'),'FRANZ');
+});
+
+test('assigns dialogue and directions to their current character',()=>{
+  const model=makeModel([[
+    'Franz.',
+    'Meine erste Replik.',
+    {text:'(geht zum Fenster)',italic:true},
+    'Amalia.',
+    'Meine Antwort.',
+    'Franz.',
+    'Noch einmal.',
+    'Amalia: Direkt in derselben Zeile.',
+  ]],'Test','DOCX');
+
+  assert.deepEqual(model.paragraphs.map(({type,speaker})=>[type,speaker]),[
+    ['speaker','Franz'],
+    ['dialogue','Franz'],
+    ['direction','Franz'],
+    ['speaker','Amalia'],
+    ['dialogue','Amalia'],
+    ['speaker','Franz'],
+    ['dialogue','Franz'],
+    ['speaker-dialogue','Amalia'],
+  ]);
+  assert.equal(speakerLabel('D. a. Moor (weint).'),'D. a. Moor');
 });

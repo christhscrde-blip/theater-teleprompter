@@ -12,22 +12,36 @@
   <header class="app-header">
     <div class="brand">
       <div class="brand-mark" aria-hidden="true">TAT</div>
-      <div><p class="eyebrow">Taugliches Amateur Theater</p><h1>Theater-Teleprompter</h1></div>
+      <div>
+        <p class="eyebrow">Taugliches Amateur Theater <span class="version-badge">Version 2</span></p>
+        <h1>Theater-Teleprompter</h1>
+      </div>
     </div>
     <div class="header-actions">
+      <button id="toggleSidebarButton" type="button" aria-expanded="true" disabled>Navigation ausblenden</button>
       <button id="themeButton" type="button">Heller Modus</button>
       <button id="fullscreenButton" class="primary" type="button">Vollbild</button>
     </div>
   </header>
 
   <main>
-    <section id="importPanel" class="card import-panel">
+    <section id="importPanel" class="card import-panel" aria-labelledby="importTitle">
       <div class="import-copy">
         <span class="import-icon" aria-hidden="true">Aa</span>
-        <div><p class="eyebrow">Dein Bühnenmanuskript</p><h2>Datei öffnen</h2><p>DOCX oder textbasierte PDF auswählen. Die Datei bleibt vollständig auf diesem Gerät.</p></div>
+        <div>
+          <p class="eyebrow">Dein Bühnenmanuskript</p>
+          <h2 id="importTitle">Datei öffnen oder hier ablegen</h2>
+          <p>DOCX oder textbasierte PDF. Verarbeitung und Leseposition bleiben auf diesem Gerät.</p>
+          <p id="recentSettings" class="recent-settings">Deine Lesewerte werden automatisch gemerkt.</p>
+        </div>
       </div>
       <label class="file-button" for="fileInput">Datei auswählen</label>
       <input id="fileInput" type="file" accept=".docx,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/pdf">
+      <div class="format-preview" role="group" aria-label="Beispiel der automatischen Formatierung">
+        <span class="preview-speaker">MARIA</span>
+        <span>Das ist eine Replik.</span>
+        <em>(geht zum Fenster)</em>
+      </div>
       <p id="importStatus" class="status" aria-live="polite">Noch keine Datei geladen.</p>
     </section>
 
@@ -40,6 +54,13 @@
           <button class="tab" data-mode="pages" type="button">Seiten</button>
         </div>
         <nav id="navigationList" class="navigation-list"></nav>
+        <div class="role-panel">
+          <label for="roleSelect"><span class="eyebrow">Meine Rolle</span> Eigene Einsätze üben</label>
+          <select id="roleSelect">
+            <option value="">Alle Rollen anzeigen</option>
+          </select>
+          <p id="roleHint">Wähle eine Figur, um ihre Einsätze und Stichwörter hervorzuheben.</p>
+        </div>
       </aside>
 
       <section class="prompter-column">
@@ -51,6 +72,10 @@
           <div class="reading-guide" aria-hidden="true"></div>
           <article id="scriptDisplay" class="script-display"></article>
         </div>
+        <div class="timeline">
+          <input id="progressInput" type="range" min="0" max="1000" value="0" aria-label="Leseposition">
+          <div id="sceneMarkers" class="scene-markers" role="group" aria-label="Szenenmarken"></div>
+        </div>
         <div class="card controls">
           <div class="transport" role="group" aria-label="Wiedergabesteuerung">
             <button id="previousButton" type="button">← Seite</button>
@@ -59,10 +84,22 @@
             <button id="forwardButton" type="button">+10 s</button>
             <button id="nextButton" type="button">Seite →</button>
           </div>
+          <div class="preset-row" role="group" aria-label="Lesepresets">
+            <span>Preset</span>
+            <button type="button" data-preset="probe">Probe</button>
+            <button type="button" data-preset="buehne">Bühne</button>
+            <button type="button" data-preset="beamer">Beamer</button>
+            <button type="button" data-preset="entfernung">Große Entfernung</button>
+          </div>
           <div class="reading-settings">
             <label><span>Tempo <strong id="speedValue">24</strong></span><input id="speedInput" type="range" min="4" max="100" value="24"></label>
             <label><span>Schrift <strong id="fontValue">46</strong></span><input id="fontInput" type="range" min="28" max="82" value="46"></label>
             <label><span>Zeilenhöhe <strong id="lineHeightValue">1.55</strong></span><input id="lineHeightInput" type="range" min="1.25" max="2" step="0.05" value="1.55"></label>
+          </div>
+          <div class="display-settings" role="group" aria-label="Darstellung">
+            <button id="focusButton" class="toggle active" type="button" aria-pressed="true">Lesefokus an</button>
+            <button id="roleColorsButton" class="toggle active" type="button" aria-pressed="true">Rollenfarben an</button>
+            <button id="wakeLockButton" class="toggle" type="button" aria-pressed="false">Bildschirm wach halten</button>
           </div>
         </div>
       </section>
@@ -70,6 +107,16 @@
   </main>
 
   <button id="exitPresentationButton" class="exit-presentation" type="button">Vollbild verlassen</button>
+  <div id="presentationControls" class="presentation-controls" role="group" aria-label="Vollbildsteuerung">
+    <button id="presentationRewindButton" type="button" aria-label="Zehn Sekunden zurück">−10 s</button>
+    <button id="presentationPlayButton" class="primary" type="button">Start</button>
+    <button id="presentationForwardButton" type="button" aria-label="Zehn Sekunden vor">+10 s</button>
+    <button id="fontMinusButton" type="button" aria-label="Schrift verkleinern">A−</button>
+    <button id="fontPlusButton" type="button" aria-label="Schrift vergrößern">A+</button>
+    <button id="speedMinusButton" type="button" aria-label="Tempo verringern">Langsamer</button>
+    <button id="speedPlusButton" type="button" aria-label="Tempo erhöhen">Schneller</button>
+    <input id="presentationProgressInput" type="range" min="0" max="1000" value="0" aria-label="Leseposition im Vollbild">
+  </div>
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <script src="app.js" type="module"></script>
 </body>
