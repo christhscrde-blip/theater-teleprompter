@@ -1,4 +1,4 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="de">
 <head>
   <meta charset="utf-8">
@@ -10,17 +10,23 @@
 </head>
 <body>
   <header class="app-header">
-    <div><p class="eyebrow">Taugliches Amateur Theater</p><h1>Theater-Teleprompter</h1></div>
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">TAT</div>
+      <div><p class="eyebrow">Taugliches Amateur Theater</p><h1>Theater-Teleprompter</h1></div>
+    </div>
     <div class="header-actions">
       <button id="themeButton" type="button">Heller Modus</button>
-      <button id="fullscreenButton" type="button">Vollbild</button>
+      <button id="fullscreenButton" class="primary" type="button">Vollbild</button>
     </div>
   </header>
 
   <main>
     <section id="importPanel" class="card import-panel">
-      <div><h2>Datei öffnen</h2><p>DOCX oder textbasierte PDF auswählen. Die Datei wird nur in diesem Browser verarbeitet und nicht hochgeladen.</p></div>
-      <label class="file-button" for="fileInput">DOCX oder PDF auswählen</label>
+      <div class="import-copy">
+        <span class="import-icon" aria-hidden="true">Aa</span>
+        <div><p class="eyebrow">Dein Bühnenmanuskript</p><h2>Datei öffnen</h2><p>DOCX oder textbasierte PDF auswählen. Die Datei bleibt vollständig auf diesem Gerät.</p></div>
+      </div>
+      <label class="file-button" for="fileInput">Datei auswählen</label>
       <input id="fileInput" type="file" accept=".docx,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/pdf">
       <p id="importStatus" class="status" aria-live="polite">Noch keine Datei geladen.</p>
     </section>
@@ -37,20 +43,27 @@
       </aside>
 
       <section class="prompter-column">
-        <div class="status-row"><span id="locationText">Bereit</span><span><span id="pageText">Seite 1</span> · <span id="progressText">0 %</span></span></div>
+        <div class="status-row">
+          <span id="locationText" class="location">Bereit</span>
+          <span class="position"><span id="pageText">Seite 1</span><span aria-hidden="true">·</span><span id="progressText">0 %</span></span>
+        </div>
         <div id="stage" class="stage" tabindex="0">
           <div class="reading-guide" aria-hidden="true"></div>
           <article id="scriptDisplay" class="script-display"></article>
         </div>
         <div class="card controls">
-          <button id="previousButton" type="button">← Seite</button>
-          <button id="rewindButton" type="button">−10 s</button>
-          <button id="playButton" class="primary" type="button">Start</button>
-          <button id="forwardButton" type="button">+10 s</button>
-          <button id="nextButton" type="button">Seite →</button>
-          <label>Tempo <strong id="speedValue">24</strong><input id="speedInput" type="range" min="4" max="100" value="24"></label>
-          <label>Schrift <strong id="fontValue">46</strong><input id="fontInput" type="range" min="28" max="82" value="46"></label>
-          <label>Zeilenhöhe <strong id="lineHeightValue">1.55</strong><input id="lineHeightInput" type="range" min="1.25" max="2" step="0.05" value="1.55"></label>
+          <div class="transport" role="group" aria-label="Wiedergabesteuerung">
+            <button id="previousButton" type="button">← Seite</button>
+            <button id="rewindButton" type="button">−10 s</button>
+            <button id="playButton" class="primary play-button" type="button">Start</button>
+            <button id="forwardButton" type="button">+10 s</button>
+            <button id="nextButton" type="button">Seite →</button>
+          </div>
+          <div class="reading-settings">
+            <label><span>Tempo <strong id="speedValue">24</strong></span><input id="speedInput" type="range" min="4" max="100" value="24"></label>
+            <label><span>Schrift <strong id="fontValue">46</strong></span><input id="fontInput" type="range" min="28" max="82" value="46"></label>
+            <label><span>Zeilenhöhe <strong id="lineHeightValue">1.55</strong></span><input id="lineHeightInput" type="range" min="1.25" max="2" step="0.05" value="1.55"></label>
+          </div>
         </div>
       </section>
     </section>
